@@ -245,7 +245,7 @@ impl<'a> Lexer<'a> {
         self.advance(); // skip the ending quote
         if is_terminated {
             Ok(Token::new(
-                TokenType::String,
+                TokenType::Char,
                 &self.source[start_bp..end_bp],
                 start_bp,
                 end_bp,
@@ -317,7 +317,7 @@ impl<'a> Lexer<'a> {
     fn read_word(&mut self) -> Result<Token<'a>, IntprError> {
         let (start_bp, _) = self.ch.unwrap();
         let start_line = self.line_num;
-        let start_col = self.line_num;
+        let start_col = self.col_num;
         while self
             .ch
             .is_some_and(|(_, ch)| ch.is_alphanumeric() || ch == '_')
