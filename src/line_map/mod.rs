@@ -18,10 +18,7 @@ impl LineMap {
         }
     }
 
-    /*
-     * Takes the byte position (index) of a character and returns the line number and the column
-     * number of the character in the byte position
-     * */
+    // given a byte position, returns the column number and the line number (zero based)
     pub fn get_position(&self, byte_pos: usize) -> Option<(usize, usize)> {
         if byte_pos >= self.source_len {
             None
@@ -48,6 +45,7 @@ mod test {
         let line_map = LineMap::new("Hello\nJames\nThis\nis\nfun.");
         assert_eq!(line_map.source_len, 24);
         assert_eq!(line_map.line_starts, vec![0, 6, 12, 17, 20]);
+        assert_eq!(line_map.get_position(0), Some((0, 0)));
         assert_eq!(line_map.get_position(2), Some((0, 2)));
         assert_eq!(line_map.get_position(7), Some((6, 1)));
         assert_eq!(line_map.get_position(10), Some((6, 4)));
