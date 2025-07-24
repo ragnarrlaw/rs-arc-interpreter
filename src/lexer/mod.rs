@@ -374,3 +374,105 @@ impl<'a> Lexer<'a> {
         ))
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{lexer::Lexer, lexer::TokenType, line_map::LineMap};
+
+    #[test]
+    fn test_lexer_read_operator() {
+        let source = ":===+-/*!=>>=<<=!&&||";
+        let line_map = LineMap::new(&source);
+        let mut lexer = Lexer::new(&source, &line_map);
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Assign);
+                assert_eq!(token.lexeme, ":=");
+                assert_eq!(token.span.start_byte_pos, 0);
+                assert_eq!(token.span.end_byte_pos, 2);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 1);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::EqEq);
+                assert_eq!(token.lexeme, "==");
+                assert_eq!(token.span.start_byte_pos, 2);
+                assert_eq!(token.span.end_byte_pos, 4);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 3);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Plus);
+                assert_eq!(token.lexeme, "+");
+                assert_eq!(token.span.start_byte_pos, 4);
+                assert_eq!(token.span.end_byte_pos, 5);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 5);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Minus);
+                assert_eq!(token.lexeme, "-");
+                assert_eq!(token.span.start_byte_pos, 5);
+                assert_eq!(token.span.end_byte_pos, 6);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 6);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Slash);
+                assert_eq!(token.lexeme, "/");
+                assert_eq!(token.span.start_byte_pos, 6);
+                assert_eq!(token.span.end_byte_pos, 7);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 7);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Asterix);
+                assert_eq!(token.lexeme, "*");
+                assert_eq!(token.span.start_byte_pos, 7);
+                assert_eq!(token.span.end_byte_pos, 8);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 8);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+    }
+}
