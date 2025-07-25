@@ -13,8 +13,8 @@ pub struct Lexer<'a> {
     pub line_map: &'a LineMap,
     pub source_itr: Peekable<CharIndices<'a>>,
     pub ch: Option<(usize, char)>, // track the byte position of the current character and the character
-    pub line_num: usize,
-    pub col_num: usize,
+    pub line_num: usize,           // track the current line number (one-based)
+    pub col_num: usize,            // track the current column number (one-based)
 }
 
 impl<'a> Lexer<'a> {
@@ -195,7 +195,7 @@ impl<'a> Lexer<'a> {
                 is_terminated = true;
                 break;
             } else if ch == '\\' {
-                self.advance();
+                self.advance(); // skip  the \
             }
             self.advance();
         }
@@ -377,7 +377,7 @@ impl<'a> Lexer<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{lexer::Lexer, lexer::TokenType, line_map::LineMap};
+    use crate::{error::ErrorType, lexer::Lexer, lexer::TokenType, line_map::LineMap};
 
     #[test]
     fn test_lexer_read_operator() {
@@ -474,5 +474,850 @@ mod test {
             }
         };
 
+        // let source = ":===+-/*!=>>=<<=!&&||";
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::NotEq);
+                assert_eq!(token.lexeme, "!=");
+                assert_eq!(token.span.start_byte_pos, 8);
+                assert_eq!(token.span.end_byte_pos, 10);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 9);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Gt);
+                assert_eq!(token.lexeme, ">");
+                assert_eq!(token.span.start_byte_pos, 10);
+                assert_eq!(token.span.end_byte_pos, 11);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 11);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::GtEq);
+                assert_eq!(token.lexeme, ">=");
+                assert_eq!(token.span.start_byte_pos, 11);
+                assert_eq!(token.span.end_byte_pos, 13);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 12);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Lt);
+                assert_eq!(token.lexeme, "<");
+                assert_eq!(token.span.start_byte_pos, 13);
+                assert_eq!(token.span.end_byte_pos, 14);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 14);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::LtEq);
+                assert_eq!(token.lexeme, "<=");
+                assert_eq!(token.span.start_byte_pos, 14);
+                assert_eq!(token.span.end_byte_pos, 16);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 15);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        // let source = ":===+-/*!=>>=<<=!&&||";
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Not);
+                assert_eq!(token.lexeme, "!");
+                assert_eq!(token.span.start_byte_pos, 16);
+                assert_eq!(token.span.end_byte_pos, 17);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 17);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        // let source = ":===+-/*!=>>=<<=!&&||";
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::And);
+                assert_eq!(token.lexeme, "&&");
+                assert_eq!(token.span.start_byte_pos, 17);
+                assert_eq!(token.span.end_byte_pos, 19);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 18);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        // let source = ":===+-/*!=>>=<<=!&&||";
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Or);
+                assert_eq!(token.lexeme, "||");
+                assert_eq!(token.span.start_byte_pos, 19);
+                assert_eq!(token.span.end_byte_pos, 21);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 20);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+    }
+
+    #[test]
+    fn test_lexer_read_punctuation() {
+        // ';' | ',' | '(' | ')' | '[' | ']' | '{' | '}'
+        let source = ";,()[]{}";
+        let line_map = LineMap::new(&source);
+        let mut lexer = Lexer::new(&source, &line_map);
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Semicolon);
+                assert_eq!(token.lexeme, ";");
+                assert_eq!(token.span.start_byte_pos, 0);
+                assert_eq!(token.span.end_byte_pos, 1);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 1);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        // ';' | ',' | '(' | ')' | '[' | ']' | '{' | '}'
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Comma);
+                assert_eq!(token.lexeme, ",");
+                assert_eq!(token.span.start_byte_pos, 1);
+                assert_eq!(token.span.end_byte_pos, 2);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 2);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        // ';' | ',' | '(' | ')' | '[' | ']' | '{' | '}'
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::LParen);
+                assert_eq!(token.lexeme, "(");
+                assert_eq!(token.span.start_byte_pos, 2);
+                assert_eq!(token.span.end_byte_pos, 3);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 3);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        // ';' | ',' | '(' | ')' | '[' | ']' | '{' | '}'
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::RParen);
+                assert_eq!(token.lexeme, ")");
+                assert_eq!(token.span.start_byte_pos, 3);
+                assert_eq!(token.span.end_byte_pos, 4);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 4);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        // ';' | ',' | '(' | ')' | '[' | ']' | '{' | '}'
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::LSqBracket);
+                assert_eq!(token.lexeme, "[");
+                assert_eq!(token.span.start_byte_pos, 4);
+                assert_eq!(token.span.end_byte_pos, 5);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 5);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        // ';' | ',' | '(' | ')' | '[' | ']' | '{' | '}'
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::RSqBracket);
+                assert_eq!(token.lexeme, "]");
+                assert_eq!(token.span.start_byte_pos, 5);
+                assert_eq!(token.span.end_byte_pos, 6);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 6);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        // ';' | ',' | '(' | ')' | '[' | ']' | '{' | '}'
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::LBrace);
+                assert_eq!(token.lexeme, "{");
+                assert_eq!(token.span.start_byte_pos, 6);
+                assert_eq!(token.span.end_byte_pos, 7);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 7);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        // ';' | ',' | '(' | ')' | '[' | ']' | '{' | '}'
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::RBrace);
+                assert_eq!(token.lexeme, "}");
+                assert_eq!(token.span.start_byte_pos, 7);
+                assert_eq!(token.span.end_byte_pos, 8);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 8);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+    }
+
+    #[test]
+    fn test_lexer_read_string() {
+        let source = "\"Hello, World!\"";
+        let line_map = LineMap::new(&source);
+        let mut lexer = Lexer::new(&source, &line_map);
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::String);
+                assert_eq!(token.lexeme, "Hello, World!");
+                assert_eq!(token.span.start_byte_pos, 1);
+                assert_eq!(token.span.end_byte_pos, 14);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 2);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let source = "\"Hello, \t🤗 World!\"";
+        let line_map = LineMap::new(&source);
+        let mut lexer = Lexer::new(&source, &line_map);
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::String);
+                assert_eq!(token.span.start_byte_pos, 1);
+                assert_eq!(token.lexeme, "Hello, \t🤗 World!");
+                assert_eq!(token.span.end_byte_pos, 20);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 2);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let source = r#"" \" ""#;
+        println!("source: {source}");
+        let line_map = LineMap::new(&source);
+        let mut lexer = Lexer::new(&source, &line_map);
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::String);
+                assert_eq!(token.lexeme, " \\\" ");
+                assert_eq!(token.span.start_byte_pos, 1);
+                assert_eq!(token.span.end_byte_pos, 5);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 2);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+    }
+
+    #[test]
+    fn test_lexer_read_char() {
+        let source = "'a'";
+        let line_map = LineMap::new(&source);
+        let mut lexer = Lexer::new(&source, &line_map);
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Char);
+                assert_eq!(token.lexeme, "a");
+                assert_eq!(token.span.start_byte_pos, 1);
+                assert_eq!(token.span.end_byte_pos, 2);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 2);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let source = "'\t'";
+        let line_map = LineMap::new(&source);
+        let mut lexer = Lexer::new(&source, &line_map);
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Char);
+                assert_eq!(token.lexeme, "\t");
+                assert_eq!(token.span.start_byte_pos, 1);
+                assert_eq!(token.span.end_byte_pos, 2);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 2);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let source = "'🤗'";
+        let line_map = LineMap::new(&source);
+        let mut lexer = Lexer::new(&source, &line_map);
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Char);
+                assert_eq!(token.lexeme, "🤗");
+                assert_eq!(token.span.start_byte_pos, 1);
+                assert_eq!(token.span.end_byte_pos, 5);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 2);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+    }
+
+    #[test]
+    fn test_lexer_read_number() {
+        let source = "10.00 1_000 1___000.00 12002.00.00";
+        let line_map = LineMap::new(&source);
+        let mut lexer = Lexer::new(&source, &line_map);
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Number);
+                assert_eq!(token.lexeme, "10.00");
+                assert_eq!(token.span.start_byte_pos, 0);
+                assert_eq!(token.span.end_byte_pos, 5);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 1);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Number);
+                assert_eq!(token.lexeme, "1_000");
+                assert_eq!(token.span.start_byte_pos, 6);
+                assert_eq!(token.span.end_byte_pos, 11);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 7);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Number);
+                assert_eq!(token.lexeme, "1___000.00");
+                assert_eq!(token.span.start_byte_pos, 12);
+                assert_eq!(token.span.end_byte_pos, 22);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 13);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                panic!("Has 2 decimal points {:?}", token)
+            }
+            Err(err) => {
+                assert_eq!(err.error_type, ErrorType::LexerErrorInvalidDecimalPoint);
+                assert_eq!(
+                    err.msg,
+                    "error: too many decimal points 12002.00.00 found.
+ --><repl>:1:24
+ |
+1| 10.00 1_000 1___000.00 12002.00.00
+ |                        ^^^^^^^^^^^"
+                )
+            }
+        };
+    }
+
+    #[test]
+    fn test_lexer_read_word() {
+        let source = "if let fn false true else return temp_1";
+        let line_map = LineMap::new(&source);
+        let mut lexer = Lexer::new(&source, &line_map);
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::If);
+                assert_eq!(token.lexeme, "if");
+                assert_eq!(token.span.start_byte_pos, 0);
+                assert_eq!(token.span.end_byte_pos, 2);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 1);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Let);
+                assert_eq!(token.lexeme, "let");
+                assert_eq!(token.span.start_byte_pos, 3);
+                assert_eq!(token.span.end_byte_pos, 6);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 4);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Function);
+                assert_eq!(token.lexeme, "fn");
+                assert_eq!(token.span.start_byte_pos, 7);
+                assert_eq!(token.span.end_byte_pos, 9);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 8);
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::False);
+                assert_eq!(token.lexeme, "false");
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::True);
+                assert_eq!(token.lexeme, "true");
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Else);
+                assert_eq!(token.lexeme, "else");
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Return);
+                assert_eq!(token.lexeme, "return");
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Identifier);
+                assert_eq!(token.lexeme, "temp_1");
+            }
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+    }
+
+    #[test]
+    fn test_lexer_read_source_code() {
+        let source = "let x := 10_000;
+        let y := 111_111;
+        let add := fn (a, b) {
+            return a + b;
+        };
+        print(add(x, y));
+        if true != false {
+            print(\"hello, world!\");
+        } else {
+            print(\"I don't feel like greeting\");
+        }
+        ";
+        let line_map = LineMap::new(&source);
+        let mut lexer = Lexer::new(&source, &line_map);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Let);
+        assert_eq!(t.lexeme, "let");
+        assert_eq!(t.span.line_num, 1);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "x");
+        assert_eq!(t.span.line_num, 1);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Assign);
+        assert_eq!(t.lexeme, ":=");
+        assert_eq!(t.span.line_num, 1);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Number);
+        assert_eq!(t.lexeme, "10_000");
+        assert_eq!(t.span.line_num, 1);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Semicolon);
+        assert_eq!(t.lexeme, ";");
+        assert_eq!(t.span.line_num, 1);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Let);
+        assert_eq!(t.lexeme, "let");
+        assert_eq!(t.span.line_num, 2);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "y");
+        assert_eq!(t.span.line_num, 2);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Assign);
+        assert_eq!(t.lexeme, ":=");
+        assert_eq!(t.span.line_num, 2);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Number);
+        assert_eq!(t.lexeme, "111_111");
+        assert_eq!(t.span.line_num, 2);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Semicolon);
+        assert_eq!(t.lexeme, ";");
+        assert_eq!(t.span.line_num, 2);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Let);
+        assert_eq!(t.lexeme, "let");
+        assert_eq!(t.span.line_num, 3);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "add");
+        assert_eq!(t.span.line_num, 3);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Assign);
+        assert_eq!(t.lexeme, ":=");
+        assert_eq!(t.span.line_num, 3);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Function);
+        assert_eq!(t.lexeme, "fn");
+        assert_eq!(t.span.line_num, 3);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::LParen);
+        assert_eq!(t.lexeme, "(");
+        assert_eq!(t.span.line_num, 3);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "a");
+        assert_eq!(t.span.line_num, 3);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Comma);
+        assert_eq!(t.lexeme, ",");
+        assert_eq!(t.span.line_num, 3);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "b");
+        assert_eq!(t.span.line_num, 3);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::RParen);
+        assert_eq!(t.lexeme, ")");
+        assert_eq!(t.span.line_num, 3);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::LBrace);
+        assert_eq!(t.lexeme, "{");
+        assert_eq!(t.span.line_num, 3);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Return);
+        assert_eq!(t.lexeme, "return");
+        assert_eq!(t.span.line_num, 4);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "a");
+        assert_eq!(t.span.line_num, 4);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Plus);
+        assert_eq!(t.lexeme, "+");
+        assert_eq!(t.span.line_num, 4);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "b");
+        assert_eq!(t.span.line_num, 4);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Semicolon);
+        assert_eq!(t.lexeme, ";");
+        assert_eq!(t.span.line_num, 4);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::RBrace);
+        assert_eq!(t.lexeme, "}");
+        assert_eq!(t.span.line_num, 5);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Semicolon);
+        assert_eq!(t.lexeme, ";");
+        assert_eq!(t.span.line_num, 5);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "print");
+        assert_eq!(t.span.line_num, 6);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::LParen);
+        assert_eq!(t.lexeme, "(");
+        assert_eq!(t.span.line_num, 6);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "add");
+        assert_eq!(t.span.line_num, 6);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::LParen);
+        assert_eq!(t.lexeme, "(");
+        assert_eq!(t.span.line_num, 6);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "x");
+        assert_eq!(t.span.line_num, 6);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Comma);
+        assert_eq!(t.lexeme, ",");
+        assert_eq!(t.span.line_num, 6);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "y");
+        assert_eq!(t.span.line_num, 6);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::RParen);
+        assert_eq!(t.lexeme, ")");
+        assert_eq!(t.span.line_num, 6);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::RParen);
+        assert_eq!(t.lexeme, ")");
+        assert_eq!(t.span.line_num, 6);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Semicolon);
+        assert_eq!(t.lexeme, ";");
+        assert_eq!(t.span.line_num, 6);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::If);
+        assert_eq!(t.lexeme, "if");
+        assert_eq!(t.span.line_num, 7);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::True);
+        assert_eq!(t.lexeme, "true");
+        assert_eq!(t.span.line_num, 7);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::NotEq);
+        assert_eq!(t.lexeme, "!=");
+        assert_eq!(t.span.line_num, 7);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::False);
+        assert_eq!(t.lexeme, "false");
+        assert_eq!(t.span.line_num, 7);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::LBrace);
+        assert_eq!(t.lexeme, "{");
+        assert_eq!(t.span.line_num, 7);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "print");
+        assert_eq!(t.span.line_num, 8);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::LParen);
+        assert_eq!(t.lexeme, "(");
+        assert_eq!(t.span.line_num, 8);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::String);
+        assert_eq!(t.lexeme, "hello, world!");
+        assert_eq!(t.span.line_num, 8);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::RParen);
+        assert_eq!(t.lexeme, ")");
+        assert_eq!(t.span.line_num, 8);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Semicolon);
+        assert_eq!(t.lexeme, ";");
+        assert_eq!(t.span.line_num, 8);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::RBrace);
+        assert_eq!(t.lexeme, "}");
+        assert_eq!(t.span.line_num, 9);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Else);
+        assert_eq!(t.lexeme, "else");
+        assert_eq!(t.span.line_num, 9);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::LBrace);
+        assert_eq!(t.lexeme, "{");
+        assert_eq!(t.span.line_num, 9);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Identifier);
+        assert_eq!(t.lexeme, "print");
+        assert_eq!(t.span.line_num, 10);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::LParen);
+        assert_eq!(t.lexeme, "(");
+        assert_eq!(t.span.line_num, 10);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::String);
+        assert_eq!(t.lexeme, "I don't feel like greeting");
+        assert_eq!(t.span.line_num, 10);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::RParen);
+        assert_eq!(t.lexeme, ")");
+        assert_eq!(t.span.line_num, 10);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Semicolon);
+        assert_eq!(t.lexeme, ";");
+        assert_eq!(t.span.line_num, 10);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::RBrace);
+        assert_eq!(t.lexeme, "}");
+        assert_eq!(t.span.line_num, 11);
     }
 }
