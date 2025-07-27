@@ -4,11 +4,11 @@ use std::vec::Vec;
 use crate::lexer::token::Span;
 
 #[derive(Debug)]
-pub struct Program {
-    pub statements: Vec<Statement>,
+pub struct Program<'a> {
+    pub statements: Vec<Statement<'a>>,
 }
 
-impl Display for Program {
+impl<'a> Display for Program<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut tmp_f = String::new();
         for stmt in &self.statements {
@@ -19,29 +19,29 @@ impl Display for Program {
 }
 
 #[derive(Debug)]
-pub enum Statement {
+pub enum Statement<'a> {
     Let {
-        span: Span,
+        span: Span, // span of the let -> "let ... := ...;"
         identifier: String,
-        value: Expression,
+        value: Expression<'a>,
     },
     Return {
         span: Span,
-        value: Option<Expression>,
+        value: Option<Expression<'a>>,
     },
     Expression {
         span: Span,
-        expr: Expression,
+        expr: Expression<'a>,
     },
     FunctionDef {
         span: Span,
         identifier: String,
         params: Vec<String>,
-        body: Expression,
+        body: Expression<'a>,
     },
 }
 
-impl Display for Statement {
+impl<'a> Display for Statement<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Let {
@@ -50,8 +50,8 @@ impl Display for Statement {
                 value,
             } => write!(f, "<binding> {} := {};", identifier, value),
             Self::Return { span: _, value } => match value {
-                Some(expr) => write!(f, "return {};", expr),
-                None => write!(f, "return;"),
+                Some(expr) => write!(f, "<return> {};", expr),
+                None => write!(f, "<return>"),
             },
             Self::Expression { span: _, expr } => write!(f, "<expression> {}", expr),
             _ => todo!(),
@@ -81,7 +81,7 @@ impl Display for Operator {
 }
 
 #[derive(Debug)]
-pub enum Expression {
+pub enum Expression<'a> {
     Number {
         span: Span,
         val: f64,
@@ -98,41 +98,52 @@ pub enum Expression {
         span: Span,
         val: char,
     },
+    Identifier {
+        identifier: &'a str,
+        span: Span,
+    },
     PrefixExpression {
         span: Span,
         op: Operator,
-        left_expr: Box<Expression>,
+        left_expr: Box<Expression<'a>>,
     },
     InfixExpression {
         span: Span,
-        left_expr: Box<Expression>,
+        left_expr: Box<Expression<'a>>,
         op: Operator,
-        right_expr: Box<Expression>,
+        right_expr: Box<Expression<'a>>,
     },
     PostfixExpression {
         span: Span,
-        right_expr: Box<Expression>,
+        right_expr: Box<Expression<'a>>,
         op: Operator,
     },
     Block {
         span: Span,
-        statements: Vec<Statement>,
-        return_expr: Option<Box<Expression>>,
+        statements: Vec<Statement<'a>>,
+        return_expr: Option<Box<Expression<'a>>>,
     },
     If {
         span: Span,
-        condition: Box<Expression>,
-        consequence: Box<Expression>,
-        alternative: Option<Box<Expression>>,
+        condition: Box<Expression<'a>>,
+        consequence: Box<Expression<'a>>,
+        alternative: Option<Box<Expression<'a>>>,
     },
-    Function {
+    Lambda {
+        // anonymous functions
         span: Span,
         params: Vec<String>,
-        body: Box<Expression>,
+        body: Box<Expression<'a>>,
+    },
+    FnCall {
+        // "fncall(...)" or "let lamda_call := fn () {}()"
+        span: Span,
+        func: Box<Expression<'a>>,
+        args: Vec<Expression<'a>>,
     },
 }
 
-impl Display for Expression {
+impl<'a> Display for Expression<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Number { span: _, val } => write!(f, "<Number> {}", val),
