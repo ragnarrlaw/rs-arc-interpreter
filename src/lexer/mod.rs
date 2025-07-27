@@ -45,7 +45,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn next_token(&mut self) -> Result<Token<'a>, IntprError> {
+    pub fn next_token(&mut self) -> Result<Token<'a>, IntprError<'a>> {
         self.skip_whitespaces();
         let (_, ch) = self.ch.unwrap_or((self.source.len(), '\0'));
         match ch {
@@ -73,7 +73,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_operator(&mut self) -> Result<Token<'a>, IntprError> {
+    fn read_operator(&mut self) -> Result<Token<'a>, IntprError<'a>> {
         let (start_bp, ch) = self.ch.unwrap();
         let line_start = self.line_num;
         let col_start = self.col_num;
@@ -144,7 +144,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_punctuation(&mut self) -> Result<Token<'a>, IntprError> {
+    fn read_punctuation(&mut self) -> Result<Token<'a>, IntprError<'a>> {
         let (start_bp, ch) = self.ch.unwrap();
         let line_start = self.line_num;
         let col_start = self.col_num;
@@ -184,7 +184,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_string(&mut self) -> Result<Token<'a>, IntprError> {
+    fn read_string(&mut self) -> Result<Token<'a>, IntprError<'a>> {
         self.advance(); // skip starting quote
         let (start_bp, _) = self.ch.unwrap();
         let start_line = self.line_num;
@@ -225,7 +225,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_char(&mut self) -> Result<Token<'a>, IntprError> {
+    fn read_char(&mut self) -> Result<Token<'a>, IntprError<'a>> {
         self.advance(); // skip starting quote
         let (start_bp, _) = self.ch.unwrap();
         let start_line = self.line_num;
@@ -266,7 +266,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_number(&mut self) -> Result<Token<'a>, IntprError> {
+    fn read_number(&mut self) -> Result<Token<'a>, IntprError<'a>> {
         let (start_bp, _) = self.ch.unwrap();
         let start_line = self.line_num;
         let start_col = self.col_num;
@@ -314,7 +314,7 @@ impl<'a> Lexer<'a> {
         ))
     }
 
-    fn read_word(&mut self) -> Result<Token<'a>, IntprError> {
+    fn read_word(&mut self) -> Result<Token<'a>, IntprError<'a>> {
         let (start_bp, _) = self.ch.unwrap();
         let start_line = self.line_num;
         let start_col = self.col_num;
@@ -360,7 +360,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_illegal(&mut self) -> Result<Token<'a>, IntprError> {
+    fn read_illegal(&mut self) -> Result<Token<'a>, IntprError<'a>> {
         let bp = self.ch.map(|(bp, _)| bp).unwrap();
         Err(IntprError::new(
             self.source,
@@ -377,7 +377,11 @@ impl<'a> Lexer<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{error::ErrorType, lexer::Lexer, lexer::TokenType, line_map::LineMap};
+    use crate::{
+        error::ErrorType,
+        lexer::{Lexer, TokenType},
+        line_map::LineMap,
+    };
 
     #[test]
     fn test_lexer_read_operator() {
@@ -1021,6 +1025,9 @@ mod test {
                 panic!("{}", err)
             }
         };
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Eof);
     }
 
     #[test]
@@ -1319,5 +1326,8 @@ mod test {
         assert_eq!(t.t_type, TokenType::RBrace);
         assert_eq!(t.lexeme, "}");
         assert_eq!(t.span.line_num, 11);
+
+        let t = lexer.next_token().unwrap();
+        assert_eq!(t.t_type, TokenType::Eof);
     }
 }
