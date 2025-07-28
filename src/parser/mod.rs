@@ -9,34 +9,35 @@ pub mod ast;
 #[derive(Debug)]
 struct Parser<'a> {
     source: &'a str,
-    lexer: Lexer<'a>,
+    lexer: &'a mut Lexer<'a>,
     line_map: &'a LineMap,
     curr_token: Option<Token<'a>>,
     peek_token: Option<Token<'a>>,
-    errors: Vec<IntprError<'a>>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(source: &'a str, lexer: Lexer<'a>, line_map: &'a LineMap) -> Self {
-        Parser {
+    pub fn new(
+        source: &'a str,
+        lexer: &'a mut Lexer<'a>,
+        line_map: &'a LineMap,
+    ) -> Result<Self, IntprError<'a>> {
+        let mut parser = Parser {
             source,
             lexer,
             line_map,
             curr_token: None,
             peek_token: None,
-            errors: vec![],
-        }
+        };
+        parser.advance()?;
+        parser.advance()?;
+        Ok(parser)
     }
 
-    fn next_token(&mut self) {
+    fn advance(&mut self) -> Result<(), IntprError<'a>> {
+        let t = self.lexer.next_token()?;
         self.curr_token = self.peek_token.take();
-        self.peek_token = match self.lexer.next_token() {
-            Ok(token) => Some(token),
-            Err(err) => {
-                self.errors.push(err); // TODO from here onwards skip to a save sequence ; or } some statement or expression termination condition
-                None
-            }
-        };
+        self.peek_token = Some(t);
+        Ok(())
     }
 
     pub fn parse_program(&mut self) -> Result<ast::Program<'a>, IntprError<'a>> {
@@ -70,7 +71,67 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        lexer::Lexer,
+        line_map::LineMap,
+        parser::{Parser, ast::Statement},
+    };
 
     #[test]
-    fn test_parser() {}
+    fn test_parse_let_statement() {
+        let source = "let x := 10;
+        let y := 20; 
+        let foobar := 8383;";
+
+        let line_map = LineMap::new(source);
+        let mut lexer = Lexer::new(source, &line_map);
+
+        let parser_res = Parser::new(source, &mut lexer, &line_map);
+        match parser_res {
+            Ok(mut parser) => {
+                match parser.parse_program() {
+                    Ok(program) => {
+                        assert_eq!(program.statements.len(), 3);
+                        match &program.statements[0] {
+                            Statement::Let {
+                                span: _,
+                                identifier,
+                                value: _,
+                            } => {
+                                assert_eq!(identifier, "x");
+                            }
+                            _ => panic!("invalid statement"),
+                        };
+                        match &program.statements[1] {
+                            Statement::Let {
+                                span: _,
+                                identifier,
+                                value: _,
+                            } => {
+                                assert_eq!(identifier, "y");
+                            }
+                            _ => panic!("invalid statement"),
+                        };
+
+                        match &program.statements[2] {
+                            Statement::Let {
+                                span: _,
+                                identifier,
+                                value: _,
+                            } => {
+                                assert_eq!(identifier, "foobar");
+                            }
+                            _ => panic!("invalid statement"),
+                        }
+                    }
+                    Err(_err) => {
+                        panic!("parser failed to identify the let statements")
+                    }
+                };
+            }
+            Err(err) => {
+                panic!("{err}")
+            }
+        };
+    }
 }
