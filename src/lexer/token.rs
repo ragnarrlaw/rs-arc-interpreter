@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TokenType {
     Illegal,
     Eof,
@@ -43,7 +43,7 @@ pub enum TokenType {
     Return,   // return
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Span {
     pub start_byte_pos: usize,
     pub end_byte_pos: usize,
