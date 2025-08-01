@@ -1,9 +1,10 @@
 use crate::{
-    error::{diagnostic::Diagnostic},
+    error::{diagnostic::Diagnostic, parser_error::ParserError},
     lexer::{
-        span::Span, token::{ Token, TokenType}, Lexer
+        Lexer,
+        span::Span,
+        token::{Token, TokenType},
     },
-    line_map::LineMap,
     parser::ast::{Expression, Program, Statement},
 };
 
@@ -13,21 +14,15 @@ pub mod ast;
 struct Parser<'a> {
     source: &'a str,
     lexer: &'a mut Lexer<'a>,
-    line_map: &'a LineMap,
     curr_token: Option<Token<'a>>,
     peek_token: Option<Token<'a>>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(
-        source: &'a str,
-        lexer: &'a mut Lexer<'a>,
-        line_map: &'a LineMap,
-    ) -> Result<Self, Box<dyn Diagnostic>> {
+    pub fn new(source: &'a str, lexer: &'a mut Lexer<'a>) -> Result<Self, Box<dyn Diagnostic>> {
         let mut parser = Parser {
             source,
             lexer,
-            line_map,
             curr_token: None,
             peek_token: None,
         };
@@ -67,15 +62,117 @@ impl<'a> Parser<'a> {
     }
 
     /*
-     * let := 10;
-     * let x 10;
+     * let x := 10;
      * */
     fn parse_let_statement(&mut self) -> Result<ast::Statement<'a>, Box<dyn Diagnostic>> {
-        todo!()
+        if !self.curr_token_is(TokenType::Let) {
+            self.advance()?;
+            return Err(Box::new(ParserError::UnexpectedToken {
+                expected: "let".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: self.curr_token.as_ref().unwrap().span,
+                hint: Some(format!(
+                    "let bindings start with \"let\" keyword. e.g. let x := 10;"
+                )),
+            }));
+        }
+        let start_span = self.curr_token.as_ref().unwrap().span;
+        if !self.peek_token_is(TokenType::Identifier) {
+            self.advance()?;
+            return Err(Box::new(ParserError::UnexpectedToken {
+                expected: "identifier".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: self.curr_token.as_ref().unwrap().span,
+                hint: None,
+            }));
+        }
+        self.advance()?;
+        let identifier = self.curr_token.as_ref().unwrap().lexeme.to_string();
+
+        if !self.peek_token_is(TokenType::Assign) {
+            self.advance()?;
+            return Err(Box::new(ParserError::UnexpectedToken {
+                expected: ":=".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: self.curr_token.as_ref().unwrap().span,
+                hint: None,
+            }));
+        }
+        self.advance()?;
+        self.advance()?;
+
+        let expr = self.parse_expression()?;
+
+        if !self.curr_token_is(TokenType::Semicolon) {
+            self.advance()?;
+            return Err(Box::new(ParserError::MissingToken {
+                missing: ";".to_string(),
+                span: self.curr_token.as_ref().unwrap().span,
+                hint: Some(format!("let statements require a semicolon(;) at the end")),
+            }));
+        }
+        let end_span = self.curr_token.as_ref().unwrap().span;
+        self.advance()?;
+        Ok(Statement::Let {
+            span: Span {
+                start_byte_pos: start_span.start_byte_pos,
+                end_byte_pos: end_span.end_byte_pos,
+                line_num: start_span.line_num,
+                col_num: start_span.col_num,
+            },
+            identifier: identifier,
+            value: expr,
+        })
     }
 
     fn parse_return_statement(&mut self) -> Result<ast::Statement<'a>, Box<dyn Diagnostic>> {
-        todo!()
+        if !self.curr_token_is(TokenType::Return) {
+            self.advance()?;
+            return Err(Box::new(ParserError::UnexpectedToken {
+                expected: "return".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: self.curr_token.as_ref().unwrap().span,
+                hint: Some(format!("return statements begins with \"return\" keyword")),
+            }));
+        }
+        let start_span = self.curr_token.as_ref().unwrap().span;
+        if self.peek_token_is(TokenType::Semicolon) {
+            self.advance()?;
+            let end_span = self.curr_token.as_ref().unwrap().span;
+            self.advance()?;
+            return Ok(Statement::Return {
+                span: Span {
+                    start_byte_pos: start_span.start_byte_pos,
+                    end_byte_pos: end_span.end_byte_pos,
+                    line_num: start_span.line_num,
+                    col_num: start_span.col_num,
+                },
+                value: None,
+            });
+        }
+        self.advance()?;
+        let expr = self.parse_expression()?;
+        if self.curr_token_is(TokenType::Semicolon) {
+            self.advance()?;
+            return Err(Box::new(ParserError::UnexpectedToken {
+                expected: "return".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: self.curr_token.as_ref().unwrap().span,
+                hint: Some(format!("return statements begins with \"return\" keyword")),
+            }));
+        }
+
+        let end_span = self.curr_token.as_ref().unwrap().span;
+        self.advance()?;
+        Ok(Statement::Return {
+            span: Span {
+                start_byte_pos: start_span.start_byte_pos,
+                end_byte_pos: end_span.end_byte_pos,
+                line_num: start_span.line_num,
+                col_num: start_span.col_num,
+            },
+            value: Some(expr),
+        })
     }
 
     /*
@@ -92,7 +189,18 @@ impl<'a> Parser<'a> {
      *
      * */
     fn parse_expression_statement(&mut self) -> Result<ast::Statement<'a>, Box<dyn Diagnostic>> {
-        todo!()
+        let start_span = self.curr_token.as_ref().unwrap().span;
+        let expr = self.parse_expression()?;
+        let end_span = self.curr_token.as_ref().unwrap().span;
+        Ok(Statement::Expression {
+            span: Span {
+                start_byte_pos: start_span.start_byte_pos,
+                end_byte_pos: end_span.end_byte_pos,
+                line_num: start_span.line_num,
+                col_num: start_span.col_num,
+            },
+            expr: expr,
+        })
     }
 
     /*
@@ -101,6 +209,16 @@ impl<'a> Parser<'a> {
      * }
      * */
     fn parse_fn_definition(&mut self) -> Result<ast::Statement<'a>, Box<dyn Diagnostic>> {
+        if !self.curr_token_is(TokenType::Function) {
+            self.advance()?;
+            return Err(Box::new(ParserError::UnexpectedToken {
+                expected: "fn".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: self.curr_token.as_ref().unwrap().span,
+                hint: Some(format!("function definitions starts with \"fn\" keyword")),
+            }));
+        }
+        let start_span = self.curr_token.as_ref().unwrap().span;
         todo!()
     }
 
@@ -151,7 +269,6 @@ impl<'a> Parser<'a> {
 mod tests {
     use crate::{
         lexer::Lexer,
-        line_map::LineMap,
         parser::{Parser, ast::Statement},
     };
 
@@ -161,10 +278,9 @@ mod tests {
         let y := 20; 
         let foobar := 8383;";
 
-        let line_map = LineMap::new(source);
         let mut lexer = Lexer::new(source);
 
-        let parser_res = Parser::new(source, &mut lexer, &line_map);
+        let parser_res = Parser::new(source, &mut lexer);
         match parser_res {
             Ok(mut parser) => {
                 match parser.parse_program() {
@@ -219,10 +335,9 @@ mod tests {
         return x; 
         return add(10, 20);";
 
-        let line_map = LineMap::new(source);
         let mut lexer = Lexer::new(source);
 
-        let parser_res = Parser::new(source, &mut lexer, &line_map);
+        let parser_res = Parser::new(source, &mut lexer);
         match parser_res {
             Ok(mut parser) => {
                 match parser.parse_program() {
