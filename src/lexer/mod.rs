@@ -99,10 +99,14 @@ impl<'a> Lexer<'a> {
             '|' => self
                 .read_two_char_operator('|', TokenType::Or)
                 .unwrap_or(TokenType::Illegal),
+            '+' => self
+                .read_two_char_operator('+', TokenType::Inc)
+                .unwrap_or(TokenType::Plus),
+            '-' => self
+                .read_two_char_operator('-', TokenType::Dec)
+                .unwrap_or(TokenType::Minus),
             '*' => TokenType::Asterix,
             '/' => TokenType::Slash,
-            '+' => TokenType::Plus,
-            '-' => TokenType::Minus,
             _ => TokenType::Illegal,
         };
         self.advance();
@@ -268,7 +272,7 @@ impl<'a> Lexer<'a> {
                     } else {
                         while self
                             .ch
-                            .is_some_and(|(_, ch)| ch.is_digit(10) || ch == '_' || ch == '.')
+                            .is_some_and(|(_, ch)| ch.is_digit(10) || ch == '_' || ch == '.' || ch == 'e' || ch == 'E')
                         {
                             self.advance();
                         }
@@ -284,7 +288,7 @@ impl<'a> Lexer<'a> {
                         )));
                     }
                 }
-                '_' => {}
+                '_' | 'e' | 'E' | '+' | '-' => {}
                 c if c.is_digit(10) => {}
                 _ => break,
             }
@@ -364,15 +368,12 @@ impl<'a> Lexer<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        lexer::{Lexer, TokenType},
-        line_map::LineMap,
-    };
+    use crate::lexer::{Lexer, TokenType};
 
     #[test]
     fn test_lexer_read_operator() {
         let source = ":===+-/*!=>>=<<=!&&||";
-let mut lexer = Lexer::new(&source);
+        let mut lexer = Lexer::new(&source);
         let t = lexer.next_token();
         match t {
             Ok(token) => {
@@ -592,7 +593,7 @@ let mut lexer = Lexer::new(&source);
     fn test_lexer_read_punctuation() {
         // ';' | ',' | '(' | ')' | '[' | ']' | '{' | '}'
         let source = ";,()[]{}";
-let mut lexer = Lexer::new(&source);
+        let mut lexer = Lexer::new(&source);
         let t = lexer.next_token();
         match t {
             Ok(token) => {
@@ -724,7 +725,7 @@ let mut lexer = Lexer::new(&source);
     #[test]
     fn test_lexer_read_string() {
         let source = "\"Hello, World!\"";
-let mut lexer = Lexer::new(&source);
+        let mut lexer = Lexer::new(&source);
         let t = lexer.next_token();
         match t {
             Ok(token) => {
@@ -741,7 +742,7 @@ let mut lexer = Lexer::new(&source);
         };
 
         let source = "\"Hello, \t🤗 World!\"";
-let mut lexer = Lexer::new(&source);
+        let mut lexer = Lexer::new(&source);
         let t = lexer.next_token();
         match t {
             Ok(token) => {
@@ -779,7 +780,7 @@ let mut lexer = Lexer::new(&source);
     #[test]
     fn test_lexer_read_char() {
         let source = "'a'";
-let mut lexer = Lexer::new(&source);
+        let mut lexer = Lexer::new(&source);
         let t = lexer.next_token();
         match t {
             Ok(token) => {
@@ -796,7 +797,7 @@ let mut lexer = Lexer::new(&source);
         };
 
         let source = "'\t'";
-let mut lexer = Lexer::new(&source);
+        let mut lexer = Lexer::new(&source);
         let t = lexer.next_token();
         match t {
             Ok(token) => {
@@ -813,7 +814,7 @@ let mut lexer = Lexer::new(&source);
         };
 
         let source = "'🤗'";
-let mut lexer = Lexer::new(&source);
+        let mut lexer = Lexer::new(&source);
         let t = lexer.next_token();
         match t {
             Ok(token) => {
@@ -833,7 +834,7 @@ let mut lexer = Lexer::new(&source);
     #[test]
     fn test_lexer_read_number() {
         let source = "10.00 1_000 1___000.00 12002.00.00";
-let mut lexer = Lexer::new(&source);
+        let mut lexer = Lexer::new(&source);
         let t = lexer.next_token();
         match t {
             Ok(token) => {
@@ -896,7 +897,7 @@ let mut lexer = Lexer::new(&source);
     #[test]
     fn test_lexer_read_word() {
         let source = "if let fn false true else return temp_1";
-let mut lexer = Lexer::new(&source);
+        let mut lexer = Lexer::new(&source);
         let t = lexer.next_token();
         match t {
             Ok(token) => {
@@ -1018,9 +1019,9 @@ let mut lexer = Lexer::new(&source);
             print(\"I don't feel like greeting\");
         }
         ";
-let mut lexer = Lexer::new(&source);
+        let mut lexer = Lexer::new(&source);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1028,7 +1029,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "let");
         assert_eq!(t.span.line_num, 1);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1036,7 +1037,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "x");
         assert_eq!(t.span.line_num, 1);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1044,7 +1045,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ":=");
         assert_eq!(t.span.line_num, 1);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1052,7 +1053,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "10_000");
         assert_eq!(t.span.line_num, 1);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1060,7 +1061,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ";");
         assert_eq!(t.span.line_num, 1);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1068,7 +1069,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "let");
         assert_eq!(t.span.line_num, 2);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1076,7 +1077,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "y");
         assert_eq!(t.span.line_num, 2);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1084,7 +1085,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ":=");
         assert_eq!(t.span.line_num, 2);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1092,7 +1093,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "111_111");
         assert_eq!(t.span.line_num, 2);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1100,7 +1101,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ";");
         assert_eq!(t.span.line_num, 2);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1108,7 +1109,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "let");
         assert_eq!(t.span.line_num, 3);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1116,7 +1117,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "add");
         assert_eq!(t.span.line_num, 3);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1124,7 +1125,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ":=");
         assert_eq!(t.span.line_num, 3);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1132,7 +1133,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "fn");
         assert_eq!(t.span.line_num, 3);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1140,7 +1141,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "(");
         assert_eq!(t.span.line_num, 3);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1148,7 +1149,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "a");
         assert_eq!(t.span.line_num, 3);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1156,7 +1157,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ",");
         assert_eq!(t.span.line_num, 3);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1164,7 +1165,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "b");
         assert_eq!(t.span.line_num, 3);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1172,7 +1173,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ")");
         assert_eq!(t.span.line_num, 3);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1180,7 +1181,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "{");
         assert_eq!(t.span.line_num, 3);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1188,7 +1189,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "return");
         assert_eq!(t.span.line_num, 4);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1196,7 +1197,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "a");
         assert_eq!(t.span.line_num, 4);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1204,7 +1205,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "+");
         assert_eq!(t.span.line_num, 4);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1212,7 +1213,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "b");
         assert_eq!(t.span.line_num, 4);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1220,7 +1221,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ";");
         assert_eq!(t.span.line_num, 4);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1228,7 +1229,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "}");
         assert_eq!(t.span.line_num, 5);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1236,7 +1237,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ";");
         assert_eq!(t.span.line_num, 5);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1244,7 +1245,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "print");
         assert_eq!(t.span.line_num, 6);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1252,7 +1253,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "(");
         assert_eq!(t.span.line_num, 6);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1260,7 +1261,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "add");
         assert_eq!(t.span.line_num, 6);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1268,7 +1269,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "(");
         assert_eq!(t.span.line_num, 6);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1276,7 +1277,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "x");
         assert_eq!(t.span.line_num, 6);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1284,7 +1285,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ",");
         assert_eq!(t.span.line_num, 6);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1292,7 +1293,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "y");
         assert_eq!(t.span.line_num, 6);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1300,7 +1301,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ")");
         assert_eq!(t.span.line_num, 6);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1308,7 +1309,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ")");
         assert_eq!(t.span.line_num, 6);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1316,7 +1317,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ";");
         assert_eq!(t.span.line_num, 6);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1324,7 +1325,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "if");
         assert_eq!(t.span.line_num, 7);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1332,7 +1333,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "true");
         assert_eq!(t.span.line_num, 7);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1340,7 +1341,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "!=");
         assert_eq!(t.span.line_num, 7);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1348,7 +1349,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "false");
         assert_eq!(t.span.line_num, 7);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1356,7 +1357,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "{");
         assert_eq!(t.span.line_num, 7);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1364,7 +1365,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "print");
         assert_eq!(t.span.line_num, 8);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1372,7 +1373,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "(");
         assert_eq!(t.span.line_num, 8);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1380,7 +1381,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "hello, world!");
         assert_eq!(t.span.line_num, 8);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1388,7 +1389,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ")");
         assert_eq!(t.span.line_num, 8);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1396,7 +1397,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ";");
         assert_eq!(t.span.line_num, 8);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1404,7 +1405,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "}");
         assert_eq!(t.span.line_num, 9);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1412,7 +1413,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "else");
         assert_eq!(t.span.line_num, 9);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1420,7 +1421,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "{");
         assert_eq!(t.span.line_num, 9);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1428,7 +1429,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "print");
         assert_eq!(t.span.line_num, 10);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1436,7 +1437,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "(");
         assert_eq!(t.span.line_num, 10);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1444,7 +1445,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "I don't feel like greeting");
         assert_eq!(t.span.line_num, 10);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1452,7 +1453,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ")");
         assert_eq!(t.span.line_num, 10);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1460,7 +1461,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, ";");
         assert_eq!(t.span.line_num, 10);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
@@ -1468,7 +1469,7 @@ let mut lexer = Lexer::new(&source);
         assert_eq!(t.lexeme, "}");
         assert_eq!(t.span.line_num, 11);
 
-                let t = match lexer.next_token() {
+        let t = match lexer.next_token() {
             Ok(token) => token,
             Err(err) => panic!("{}", err.message()),
         };
