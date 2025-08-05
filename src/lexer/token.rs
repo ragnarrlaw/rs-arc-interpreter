@@ -21,6 +21,8 @@ pub enum TokenType {
     Not,    // !
     And,    // &&
     Or,     // ||
+    Inc,    // ++
+    Dec,    // --
 
     Asterix, // *
     Slash,   // /
