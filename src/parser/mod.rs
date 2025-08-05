@@ -1,5 +1,3 @@
-use std::thread::current;
-
 use crate::{
     error::{diagnostic::Diagnostic, parser_error::ParserError},
     lexer::{
@@ -7,10 +5,20 @@ use crate::{
         span::Span,
         token::{Token, TokenType},
     },
-    parser::ast::{Expression, Program, Statement},
+    parser::{
+        ast::{Expression, Program, Statement},
+        precedence::Precedence,
+    },
 };
 
 pub mod ast;
+pub mod precedence;
+
+type ParsePrefixFn<'a> = fn(&mut Parser<'a>) -> Result<Expression<'a>, Box<dyn Diagnostic>>;
+type ParseInfixFn<'a> =
+    fn(parser: &mut Parser<'a>, lhs: Expression<'a>) -> Result<Expression<'a>, Box<dyn Diagnostic>>;
+type ParsePostfixFn<'a> =
+    fn(parser: &mut Parser<'a>, lhs: Expression<'a>) -> Result<Expression<'a>, Box<dyn Diagnostic>>;
 
 #[derive(Debug)]
 struct Parser<'a> {
@@ -101,7 +109,7 @@ impl<'a> Parser<'a> {
         self.advance()?;
         self.advance()?;
 
-        let expr = self.parse_expression()?;
+        let expr = self.parse_expression(Precedence::Lowest)?;
 
         if !self.curr_token_is(TokenType::Semicolon) {
             self.advance()?;
@@ -151,7 +159,7 @@ impl<'a> Parser<'a> {
             });
         }
         self.advance()?;
-        let expr = self.parse_expression()?;
+        let expr = self.parse_expression(Precedence::Lowest)?;
         if self.curr_token_is(TokenType::Semicolon) {
             self.advance()?;
             return Err(Box::new(ParserError::UnexpectedToken {
@@ -190,8 +198,11 @@ impl<'a> Parser<'a> {
      * */
     fn parse_expression_statement(&mut self) -> Result<ast::Statement<'a>, Box<dyn Diagnostic>> {
         let start_span = self.curr_token.as_ref().unwrap().span;
-        let expr = self.parse_expression()?;
+        let expr = self.parse_expression(Precedence::Lowest)?;
         let end_span = self.curr_token.as_ref().unwrap().span;
+        if self.peek_token_is(TokenType::Semicolon) {
+            self.advance()?;
+        }
         Ok(Statement::Expression {
             span: Span {
                 start_byte_pos: start_span.start_byte_pos,
@@ -262,7 +273,7 @@ impl<'a> Parser<'a> {
         }
 
         self.advance()?;
-        let fn_block = self.parse_expression()?;
+        let fn_block = self.parse_expression(Precedence::Lowest)?;
 
         self.advance()?;
         if !self.curr_token_is(TokenType::RBrace) {
@@ -289,7 +300,10 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_expression(&mut self) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
+    fn parse_expression(
+        &mut self,
+        precedence: Precedence,
+    ) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
         todo!()
     }
 
@@ -358,13 +372,43 @@ impl<'a> Parser<'a> {
             return Ok(args_list);
         }
 
-        args_list.push(self.parse_expression()?);
+        args_list.push(self.parse_expression(Precedence::Lowest)?);
 
         while self.curr_token_is(TokenType::Comma) {
             self.advance()?;
-            args_list.push(self.parse_expression()?);
+            args_list.push(self.parse_expression(Precedence::Lowest)?);
         }
         Ok(args_list)
+    }
+
+    fn get_prefix_parse_fn(token_type: TokenType) -> Option<ParsePrefixFn<'a>> {
+        match token_type {
+            TokenType::Identifier => Some(Parser::parse_identifier),
+            _ => None,
+        }
+    }
+
+    fn get_infix_parse_fn(token_type: TokenType) -> Option<ParseInfixFn<'a>> {
+        match token_type {
+            _ => None,
+        }
+    }
+
+    fn get_postfix_parse_fn(token_type: TokenType) -> Option<ParsePostfixFn<'a>> {
+        match token_type {
+            _ => None,
+        }
+    }
+
+    fn parse_identifier(&mut self) -> Result<Expression<'a>, Box<dyn Diagnostic>> {
+        return Ok(Expression::Identifier {
+            identifier: self.curr_token.as_ref().unwrap().lexeme,
+            span: self.curr_token.as_ref().unwrap().span,
+        });
+    }
+
+    fn parse_number_literal(&mut self) -> Result<Expression<'a>, Box<dyn Diagnostic>> {
+        todo!()
     }
 }
 
