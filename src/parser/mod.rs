@@ -54,7 +54,6 @@ impl<'a> Parser<'a> {
             .is_some_and(|t| t.t_type != TokenType::Eof)
         {
             stmts.push(self.parse_statement()?);
-            self.advance()?;
         }
         Ok(Program { statements: stmts })
     }
@@ -84,6 +83,7 @@ impl<'a> Parser<'a> {
                 )),
             }));
         }
+
         let start_span = self.curr_token.as_ref().unwrap().span;
         if !self.peek_token_is(TokenType::Identifier) {
             self.advance()?;
@@ -111,8 +111,8 @@ impl<'a> Parser<'a> {
 
         let expr = self.parse_expression(Precedence::Lowest)?;
 
+        self.advance()?;
         if !self.curr_token_is(TokenType::Semicolon) {
-            self.advance()?;
             return Err(Box::new(ParserError::MissingToken {
                 missing: ";".to_string(),
                 span: self.curr_token.as_ref().unwrap().span,
@@ -160,8 +160,8 @@ impl<'a> Parser<'a> {
         }
         self.advance()?;
         let expr = self.parse_expression(Precedence::Lowest)?;
-        if self.curr_token_is(TokenType::Semicolon) {
-            self.advance()?;
+        self.advance()?;
+        if !self.curr_token_is(TokenType::Semicolon) {
             return Err(Box::new(ParserError::UnexpectedToken {
                 expected: "return".to_string(),
                 found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
@@ -304,7 +304,19 @@ impl<'a> Parser<'a> {
         &mut self,
         precedence: Precedence,
     ) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
-        todo!()
+        let prefix_fn = Self::get_prefix_parse_fn(self.curr_token.as_ref().unwrap().t_type);
+        if let Some(prefix_fn) = prefix_fn {
+            let left = prefix_fn(self)?;
+            // TODO: Handle infix and postfix expressions once implemented
+            Ok(left)
+        } else {
+            Err(Box::new(ParserError::UnexpectedToken {
+                expected: "expression".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: self.curr_token.as_ref().unwrap().span,
+                hint: None,
+            }))
+        }
     }
 
     fn curr_token_is(&self, t_type: TokenType) -> bool {
@@ -383,7 +395,11 @@ impl<'a> Parser<'a> {
 
     fn get_prefix_parse_fn(token_type: TokenType) -> Option<ParsePrefixFn<'a>> {
         match token_type {
-            TokenType::Identifier => Some(Parser::parse_identifier),
+            TokenType::Identifier => Some(Self::parse_identifier),
+            TokenType::Number => Some(Self::parse_number_literal),
+            TokenType::String => Some(Self::parse_string_literal),
+            TokenType::Char => Some(Self::parse_char_literal),
+            TokenType::True | TokenType::False => Some(Self::parse_boolean_literal),
             _ => None,
         }
     }
@@ -408,15 +424,144 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_number_literal(&mut self) -> Result<Expression<'a>, Box<dyn Diagnostic>> {
-        todo!()
+        let token = self.curr_token.as_ref().unwrap();
+        let lexeme = token.lexeme.replace("_", "");
+        match lexeme.parse::<f64>() {
+            Ok(val) => Ok(Expression::Number {
+                span: token.span,
+                val,
+            }),
+            Err(_) => Err(Box::new(ParserError::InvalidNumberValue(
+                lexeme, token.span,
+            ))),
+        }
+    }
+
+    fn parse_boolean_literal(&mut self) -> Result<Expression<'a>, Box<dyn Diagnostic>> {
+        let token = self.curr_token.as_ref().unwrap();
+        match token.t_type {
+            TokenType::True => Ok(Expression::Boolean {
+                span: token.span,
+                val: true,
+            }),
+            TokenType::False => Ok(Expression::Boolean {
+                span: token.span,
+                val: false,
+            }),
+            _ => Err(Box::new(ParserError::UnexpectedToken {
+                expected: "true or false".to_string(),
+                found: token.lexeme.to_string(),
+                span: token.span,
+                hint: None,
+            })),
+        }
+    }
+
+    fn parse_string_literal(&mut self) -> Result<Expression<'a>, Box<dyn Diagnostic>> {
+        let token = self.curr_token.as_ref().unwrap();
+        let processed = Self::process_escape_sequences(token.lexeme, token.span)?;
+        Ok(Expression::String {
+            span: token.span,
+            val: processed,
+        })
+    }
+
+    fn parse_char_literal(&mut self) -> Result<Expression<'a>, Box<dyn Diagnostic>> {
+        let token = self.curr_token.as_ref().unwrap();
+        let processed = Self::process_escape_sequences(token.lexeme, token.span)?;
+        if processed.chars().count() != 1 {
+            return Err(Box::new(ParserError::InvalidCharValue(
+                token.lexeme.to_string(),
+                token.span,
+            )));
+        }
+        let val = processed.chars().next().unwrap();
+        Ok(Expression::Char {
+            span: token.span,
+            val,
+        })
+    }
+
+    // processes escape sequences in strings and characters (e.g., "\n", "\uXXXX").
+    fn process_escape_sequences(lexeme: &str, span: Span) -> Result<String, Box<dyn Diagnostic>> {
+        let mut result = String::new();
+        let mut chars = lexeme.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch == '\\' {
+                if let Some(next_ch) = chars.next() {
+                    match next_ch {
+                        'n' => result.push('\n'),
+                        't' => result.push('\t'),
+                        '\\' => result.push('\\'),
+                        '"' => result.push('"'),
+                        '\'' => result.push('\''),
+                        'u' => {
+                            let mut code = String::new();
+                            for _ in 0..4 {
+                                if let Some(c) = chars.next() {
+                                    // is hex digit
+                                    if c.is_digit(16) {
+                                        code.push(c);
+                                    } else {
+                                        return Err(Box::new(ParserError::InvalidEscapeSequence(
+                                            format!("\\u{}", code),
+                                            span,
+                                        )));
+                                    }
+                                } else {
+                                    return Err(Box::new(ParserError::InvalidEscapeSequence(
+                                        "\\u".to_string(),
+                                        span,
+                                    )));
+                                }
+                            }
+                            if let Ok(code_point) = u32::from_str_radix(&code, 16) {
+                                if let Some(unicode_char) = char::from_u32(code_point) {
+                                    result.push(unicode_char);
+                                } else {
+                                    return Err(Box::new(ParserError::InvalidEscapeSequence(
+                                        format!("\\u{}", code),
+                                        span,
+                                    )));
+                                }
+                            } else {
+                                return Err(Box::new(ParserError::InvalidEscapeSequence(
+                                    format!("\\u{}", code),
+                                    span,
+                                )));
+                            }
+                        }
+                        _ => {
+                            return Err(Box::new(ParserError::InvalidEscapeSequence(
+                                format!("\\{}", next_ch),
+                                span,
+                            )));
+                        }
+                    }
+                } else {
+                    return Err(Box::new(ParserError::InvalidEscapeSequence(
+                        "\\".to_string(),
+                        span,
+                    )));
+                }
+            } else {
+                result.push(ch);
+            }
+        }
+        Ok(result)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
+        error::report::Report,
         lexer::Lexer,
-        parser::{Parser, ast::Statement},
+        line_map::LineMap,
+        parser::{
+            Parser,
+            ast::{Expression, Statement},
+        },
     };
 
     #[test]
@@ -437,9 +582,13 @@ mod tests {
                             Statement::Let {
                                 span: _,
                                 identifier,
-                                value: _,
+                                value,
                             } => {
                                 assert_eq!(identifier, "x");
+                                match value {
+                                    Expression::Number { span: _, val } => assert_eq!(*val, 10.00),
+                                    _ => panic!("invalid expression"),
+                                }
                             }
                             _ => panic!("invalid statement"),
                         };
@@ -447,9 +596,13 @@ mod tests {
                             Statement::Let {
                                 span: _,
                                 identifier,
-                                value: _,
+                                value,
                             } => {
                                 assert_eq!(identifier, "y");
+                                match value {
+                                    Expression::Number { span: _, val } => assert_eq!(*val, 20.00),
+                                    _ => panic!("invalid expression"),
+                                }
                             }
                             _ => panic!("invalid statement"),
                         };
@@ -458,20 +611,36 @@ mod tests {
                             Statement::Let {
                                 span: _,
                                 identifier,
-                                value: _,
+                                value,
                             } => {
                                 assert_eq!(identifier, "foobar");
+                                match value {
+                                    Expression::Number { span: _, val } => {
+                                        assert_eq!(*val, 8383.00)
+                                    }
+                                    _ => panic!("invalid expression"),
+                                }
                             }
                             _ => panic!("invalid statement"),
                         }
                     }
-                    Err(_err) => {
-                        panic!("parser failed to identify the let statements")
+                    Err(err) => {
+                        let line_map = LineMap::new(source);
+                        let reporter = Report::new(&source, line_map, &*err);
+                        panic!(
+                            "parser failed to identify the let statements - {}",
+                            reporter
+                        )
                     }
                 };
             }
             Err(err) => {
-                panic!("{}", err.message())
+                let line_map = LineMap::new(source);
+                let reporter = Report::new(&source, line_map, &*err);
+                panic!(
+                    "parser failed to identify the let statements - {}",
+                    reporter
+                )
             }
         };
     }
@@ -491,13 +660,23 @@ mod tests {
                     Ok(program) => {
                         assert_eq!(program.statements.len(), 3);
                     }
-                    Err(_err) => {
-                        panic!("parser failed to identify the let statements")
+                    Err(err) => {
+                        let line_map = LineMap::new(source);
+                        let reporter = Report::new(&source, line_map, &*err);
+                        panic!(
+                            "parser failed to identify the let statements - {}",
+                            reporter
+                        )
                     }
                 };
             }
             Err(err) => {
-                panic!("{}", err.message())
+                let line_map = LineMap::new(source);
+                let reporter = Report::new(&source, line_map, &*err);
+                panic!(
+                    "parser failed to identify the let statements - {}",
+                    reporter
+                )
             }
         };
     }
