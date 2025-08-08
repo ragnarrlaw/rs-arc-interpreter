@@ -16,21 +16,22 @@ pub enum ParserError {
         span: Span,
         hint: Option<String>,
     },
+    InvalidEscapeSequence(String, Span),
 }
 
 impl Diagnostic for ParserError {
     fn message(&self) -> String {
         match self {
-            ParserError::InvalidExponent(lexeme, _) => {
+            Self::InvalidExponent(lexeme, _) => {
                 format!("{lexeme} invalid exponent found")
             }
-            ParserError::InvalidCharValue(lexeme, _) => {
+            Self::InvalidCharValue(lexeme, _) => {
                 format!("invalid character value {lexeme} found")
             }
-            ParserError::InvalidNumberValue(lexeme, _) => {
+            Self::InvalidNumberValue(lexeme, _) => {
                 format!("invalid number value {lexeme} found")
             }
-            ParserError::UnexpectedToken {
+            Self::UnexpectedToken {
                 expected,
                 found,
                 span: _,
@@ -42,32 +43,36 @@ impl Diagnostic for ParserError {
                     format!("expected {expected}, but found {found}")
                 }
             }
-            ParserError::MissingToken {
+            Self::MissingToken {
                 missing,
                 span: _,
                 hint: _,
             } => {
                 format!("missing {missing} token")
             }
+            Self::InvalidEscapeSequence(seq, _) => {
+                format!("Invalid escape sequence '{}' found", seq)
+            }
         }
     }
 
     fn span(&self) -> Span {
         match self {
-            ParserError::InvalidExponent(_, span) => *span,
-            ParserError::InvalidCharValue(_, span) => *span,
-            ParserError::InvalidNumberValue(_, span) => *span,
-            ParserError::UnexpectedToken {
+            Self::InvalidExponent(_, span) => *span,
+            Self::InvalidCharValue(_, span) => *span,
+            Self::InvalidNumberValue(_, span) => *span,
+            Self::UnexpectedToken {
                 expected: _,
                 found: _,
                 span,
                 hint: _,
             } => *span,
-            ParserError::MissingToken {
+            Self::MissingToken {
                 missing: _,
                 span,
                 hint: _,
             } => *span,
+            Self::InvalidEscapeSequence(_, span) => *span,
         }
     }
 
