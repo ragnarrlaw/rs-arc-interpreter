@@ -270,10 +270,15 @@ impl<'a> Lexer<'a> {
                     if !is_floating_point {
                         is_floating_point = true;
                     } else {
-                        while self
-                            .ch
-                            .is_some_and(|(_, ch)| ch.is_digit(10) || ch == '_' || ch == '.' || ch == 'e' || ch == 'E')
-                        {
+                        while self.ch.is_some_and(|(_, ch)| {
+                            ch.is_digit(10)
+                                || ch == '_'
+                                || ch == '.'
+                                || ch == 'e'
+                                || ch == 'E'
+                                || ch == '+'
+                                || ch == '-'
+                        }) {
                             self.advance();
                         }
                         let (end_bp, _) = self.ch.unwrap_or((self.source.len(), '\0'));
@@ -833,7 +838,7 @@ mod test {
 
     #[test]
     fn test_lexer_read_number() {
-        let source = "10.00 1_000 1___000.00 12002.00.00";
+        let source = "10.00 1_000 1___000.00 123.45e-6 12002.00.00";
         let mut lexer = Lexer::new(&source);
         let t = lexer.next_token();
         match t {
@@ -874,6 +879,21 @@ mod test {
                 assert_eq!(token.span.end_byte_pos, 22);
                 assert_eq!(token.span.line_num, 1);
                 assert_eq!(token.span.col_num, 13);
+            }
+            Err(err) => {
+                panic!("{}", err.message())
+            }
+        };
+
+        let t = lexer.next_token();
+        match t {
+            Ok(token) => {
+                assert_eq!(token.t_type, TokenType::Number);
+                assert_eq!(token.lexeme, "123.45e-6");
+                assert_eq!(token.span.start_byte_pos, 23);
+                assert_eq!(token.span.end_byte_pos, 32);
+                assert_eq!(token.span.line_num, 1);
+                assert_eq!(token.span.col_num, 24);
             }
             Err(err) => {
                 panic!("{}", err.message())
