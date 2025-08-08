@@ -565,10 +565,16 @@ mod tests {
     };
 
     #[test]
-    fn test_parse_let_statement() {
+ fn test_parse_let_statement() {
         let source = "let x := 10;
         let y := 20; 
-        let foobar := 8383;";
+        let foobar := 8383;
+        let new_foobar := true;
+        let n := 'n';
+        let a := \"Hello, World\n\";
+        let num := 1_000_000.00;
+        let scientific := 1_123.45e-6;
+        ";
 
         let mut lexer = Lexer::new(source);
 
@@ -577,47 +583,83 @@ mod tests {
             Ok(mut parser) => {
                 match parser.parse_program() {
                     Ok(program) => {
-                        assert_eq!(program.statements.len(), 3);
+                        assert_eq!(program.statements.len(), 8);
+
                         match &program.statements[0] {
-                            Statement::Let {
-                                span: _,
-                                identifier,
-                                value,
-                            } => {
+                            Statement::Let { identifier, value, .. } => {
                                 assert_eq!(identifier, "x");
                                 match value {
-                                    Expression::Number { span: _, val } => assert_eq!(*val, 10.00),
+                                    Expression::Number { val, .. } => assert_eq!(*val, 10.00),
                                     _ => panic!("invalid expression"),
                                 }
                             }
                             _ => panic!("invalid statement"),
-                        };
+                        }
                         match &program.statements[1] {
-                            Statement::Let {
-                                span: _,
-                                identifier,
-                                value,
-                            } => {
+                            Statement::Let { identifier, value, .. } => {
                                 assert_eq!(identifier, "y");
                                 match value {
-                                    Expression::Number { span: _, val } => assert_eq!(*val, 20.00),
+                                    Expression::Number { val, .. } => assert_eq!(*val, 20.00),
                                     _ => panic!("invalid expression"),
                                 }
                             }
                             _ => panic!("invalid statement"),
-                        };
-
+                        }
                         match &program.statements[2] {
-                            Statement::Let {
-                                span: _,
-                                identifier,
-                                value,
-                            } => {
+                            Statement::Let { identifier, value, .. } => {
                                 assert_eq!(identifier, "foobar");
                                 match value {
-                                    Expression::Number { span: _, val } => {
-                                        assert_eq!(*val, 8383.00)
-                                    }
+                                    Expression::Number { val, .. } => assert_eq!(*val, 8383.00),
+                                    _ => panic!("invalid expression"),
+                                }
+                            }
+                            _ => panic!("invalid statement"),
+                        }
+                        match &program.statements[3] {
+                            Statement::Let { identifier, value, .. } => {
+                                assert_eq!(identifier, "new_foobar");
+                                match value {
+                                    Expression::Boolean { val, .. } => assert_eq!(*val, true),
+                                    _ => panic!("invalid expression"),
+                                }
+                            }
+                            _ => panic!("invalid statement"),
+                        }
+                        match &program.statements[4] {
+                            Statement::Let { identifier, value, .. } => {
+                                assert_eq!(identifier, "n");
+                                match value {
+                                    Expression::Char { val, .. } => assert_eq!(*val, 'n'),
+                                    _ => panic!("invalid expression"),
+                                }
+                            }
+                            _ => panic!("invalid statement"),
+                        }
+                        match &program.statements[5] {
+                            Statement::Let { identifier, value, .. } => {
+                                assert_eq!(identifier, "a");
+                                match value {
+                                    Expression::String { val, .. } => assert_eq!(val, "Hello, World\n"),
+                                    _ => panic!("invalid expression"),
+                                }
+                            }
+                            _ => panic!("invalid statement"),
+                        }
+                        match &program.statements[6] {
+                            Statement::Let { identifier, value, .. } => {
+                                assert_eq!(identifier, "num");
+                                match value {
+                                    Expression::Number { val, .. } => assert_eq!(*val, 1_000_000.00),
+                                    _ => panic!("invalid expression"),
+                                }
+                            }
+                            _ => panic!("invalid statement"),
+                        }
+                        match &program.statements[7] {
+                            Statement::Let { identifier, value, .. } => {
+                                assert_eq!(identifier, "scientific");
+                                match value {
+                                    Expression::Number { val, .. } => assert_eq!(*val, 1123.45e-6),
                                     _ => panic!("invalid expression"),
                                 }
                             }
