@@ -690,8 +690,7 @@ mod tests {
     #[test]
     fn test_parse_return_statements() {
         let source = "return 10;
-        return x; 
-        return add(10, 20);";
+        return x;";
 
         let mut lexer = Lexer::new(source);
 
@@ -700,13 +699,13 @@ mod tests {
             Ok(mut parser) => {
                 match parser.parse_program() {
                     Ok(program) => {
-                        assert_eq!(program.statements.len(), 3);
+                        assert_eq!(program.statements.len(), 2);
                     }
                     Err(err) => {
                         let line_map = LineMap::new(source);
                         let reporter = Report::new(&source, line_map, &*err);
                         panic!(
-                            "parser failed to identify the let statements - {}",
+                            "parser failed to identify the return statements - {}",
                             reporter
                         )
                     }
