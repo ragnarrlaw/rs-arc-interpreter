@@ -105,7 +105,7 @@ pub enum Expression<'a> {
     PrefixExpression {
         span: Span,
         op: Operator,
-        left_expr: Box<Expression<'a>>,
+        right_expr: Box<Expression<'a>>,
     },
     InfixExpression {
         span: Span,
@@ -115,7 +115,7 @@ pub enum Expression<'a> {
     },
     PostfixExpression {
         span: Span,
-        right_expr: Box<Expression<'a>>,
+        left_expr: Box<Expression<'a>>,
         op: Operator,
     },
     Block {
