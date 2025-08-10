@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::vec::Vec;
 
 use crate::lexer::span::Span;
+use crate::lexer::token::TokenType;
 
 #[derive(Debug)]
 pub struct Program<'a> {
@@ -54,7 +55,18 @@ impl<'a> Display for Statement<'a> {
                 None => write!(f, "<return>"),
             },
             Self::Expression { span: _, expr } => write!(f, "<expression> {}", expr),
-            _ => todo!(),
+            Self::FunctionDef {
+                span: _,
+                identifier,
+                params,
+                body,
+            } => write!(
+                f,
+                "<fn def>:{} <params>:{} <body>: {}",
+                identifier,
+                params.join(", "),
+                body
+            ),
         }
     }
 }
@@ -65,7 +77,42 @@ pub enum Operator {
     Sub { span: Span },
     Divide { span: Span },
     Multiply { span: Span },
-    Dot { span: Span },
+    Access { span: Span },
+    Negation { span: Span },
+    Increment { span: Span },
+    Decrement { span: Span },
+    Equals { span: Span },
+    NotEquals { span: Span },
+    GreaterThan { span: Span },
+    GreaterThanEquals { span: Span },
+    LessThan { span: Span },
+    LessThanEquals { span: Span },
+    And { span: Span },
+    Or { span: Span },
+}
+
+impl Operator {
+    pub fn new(token_type: TokenType, span: Span) -> Option<Operator> {
+        match token_type {
+            TokenType::Plus => Some(Self::Plus { span: span }),
+            TokenType::Minus => Some(Self::Sub { span: span }),
+            TokenType::Slash => Some(Self::Divide { span: span }),
+            TokenType::Asterix => Some(Self::Multiply { span: span }),
+            TokenType::Dot => Some(Self::Access { span: span }),
+            TokenType::Not => Some(Self::Negation { span: span }),
+            TokenType::Inc => Some(Self::Increment { span: span }),
+            TokenType::Dec => Some(Self::Decrement { span: span }),
+            TokenType::EqEq => Some(Self::Equals { span: span }),
+            TokenType::NotEq => Some(Self::NotEquals { span: span }),
+            TokenType::Gt => Some(Self::GreaterThan { span: span }),
+            TokenType::GtEq => Some(Self::GreaterThanEquals { span: span }),
+            TokenType::Lt => Some(Self::LessThan { span: span }),
+            TokenType::LtEq => Some(Self::LessThanEquals { span: span }),
+            TokenType::And => Some(Self::And { span: span }),
+            TokenType::Or => Some(Self::Or { span: span }),
+            _ => None,
+        }
+    }
 }
 
 impl Display for Operator {
@@ -75,7 +122,18 @@ impl Display for Operator {
             Self::Sub { span: _ } => write!(f, "-"),
             Self::Divide { span: _ } => write!(f, "/"),
             Self::Multiply { span: _ } => write!(f, "*"),
-            Self::Dot { span: _ } => write!(f, "."),
+            Self::Access { span: _ } => write!(f, "."),
+            Self::Negation { span: _ } => write!(f, "!"),
+            Self::Increment { span: _ } => write!(f, "++"),
+            Self::Decrement { span: _ } => write!(f, "--"),
+            Self::Equals { span: _ } => write!(f, "=="),
+            Self::NotEquals { span: _ } => write!(f, "!="),
+            Self::LessThan { span: _ } => write!(f, "<"),
+            Self::LessThanEquals { span: _ } => write!(f, "<="),
+            Self::GreaterThan { span: _ } => write!(f, ">"),
+            Self::GreaterThanEquals { span: _ } => write!(f, ">="),
+            Self::And { span: _ } => write!(f, "&&"),
+            Self::Or { span: _ } => write!(f, "||"),
         }
     }
 }
@@ -146,10 +204,14 @@ pub enum Expression<'a> {
 impl<'a> Display for Expression<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Number { span: _, val } => write!(f, "<Number> {}", val),
-            Self::String { span: _, val } => write!(f, "<String> \"{}\"", val),
-            Self::Boolean { span: _, val } => write!(f, "<Boolean> {}", val),
-            Self::Char { span: _, val } => write!(f, "<Char> '{}'", val),
+            Self::Number { span: _, val } => write!(f, "<Number>: {}", val),
+            Self::String { span: _, val } => write!(f, "<String>: \"{}\"", val),
+            Self::Boolean { span: _, val } => write!(f, "<Boolean>: {}", val),
+            Self::Char { span: _, val } => write!(f, "<Char>: '{}'", val),
+            Self::Identifier {
+                identifier,
+                span: _,
+            } => write!(f, "<identifier>: {}", identifier),
             _ => todo!(),
         }
     }
