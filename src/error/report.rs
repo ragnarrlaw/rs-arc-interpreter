@@ -21,7 +21,11 @@ impl<'a> Report<'a> {
 impl<'a> Display for Report<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let span = self.diagnostic.span();
-        let (line_start, col_num) = self.line_map.get_position(span.start_byte_pos).unwrap();
+
+        let (line_start, col_num) = self
+            .line_map
+            .get_position(span.start_byte_pos)
+            .unwrap_or((self.source.len(), self.source.len()));
 
         let padding = " ".repeat(span.line_num.to_string().len());
         let pointer_len = (span.end_byte_pos - span.start_byte_pos).max(1);
