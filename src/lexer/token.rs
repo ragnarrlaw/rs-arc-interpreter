@@ -28,6 +28,7 @@ pub enum TokenType {
     Slash,   // /
     Plus,    // +
     Minus,   // -
+    Dot,     // .
 
     Semicolon,  // ;
     Comma,      // ,
