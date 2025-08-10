@@ -6,7 +6,7 @@ use crate::{
         token::{Token, TokenType},
     },
     parser::{
-        ast::{Expression, Program, Statement},
+        ast::{Expression, Operator, Program, Statement},
         precedence::Precedence,
     },
 };
@@ -200,7 +200,7 @@ impl<'a> Parser<'a> {
         let start_span = self.curr_token.as_ref().unwrap().span;
         let expr = self.parse_expression(Precedence::Lowest)?;
         let end_span = self.curr_token.as_ref().unwrap().span;
-        if self.peek_token_is(TokenType::Semicolon) {
+        if self.curr_token_is(TokenType::Semicolon) {
             self.advance()?;
         }
         Ok(Statement::Expression {
@@ -319,6 +319,41 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_prefix_expression(&mut self) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
+        let start_span = self.curr_token.as_ref().unwrap().span;
+
+        let operator = match Operator::new(
+            self.curr_token.as_ref().unwrap().t_type,
+            self.curr_token.as_ref().unwrap().span,
+        ) {
+            Some(op) => op,
+            None => {
+                return Err(Box::new(ParserError::UnexpectedToken {
+                    expected: "expression".to_string(),
+                    found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                    span: self.curr_token.as_ref().unwrap().span,
+                    hint: Some("<prefix operator><expression>".to_string()),
+                }));
+            }
+        };
+
+        self.advance()?;
+        let rhs = self.parse_expression(Precedence::Prefix)?;
+        let end_span = self.curr_token.as_ref().unwrap().span;
+        self.advance()?;
+
+        Ok(Expression::PrefixExpression {
+            span: Span {
+                start_byte_pos: start_span.start_byte_pos,
+                end_byte_pos: end_span.end_byte_pos,
+                line_num: start_span.line_num,
+                col_num: start_span.col_num,
+            },
+            op: operator,
+            right_expr: Box::new(rhs),
+        })
+    }
+
     fn curr_token_is(&self, t_type: TokenType) -> bool {
         self.curr_token.as_ref().is_some_and(|t| t.t_type == t_type)
     }
@@ -400,6 +435,11 @@ impl<'a> Parser<'a> {
             TokenType::String => Some(Self::parse_string_literal),
             TokenType::Char => Some(Self::parse_char_literal),
             TokenType::True | TokenType::False => Some(Self::parse_boolean_literal),
+            TokenType::Not
+            | TokenType::Inc
+            | TokenType::Dec
+            | TokenType::Minus
+            | TokenType::Plus => Some(Self::parse_prefix_expression),
             _ => None,
         }
     }
@@ -560,12 +600,12 @@ mod tests {
         line_map::LineMap,
         parser::{
             Parser,
-            ast::{Expression, Statement},
+            ast::{Expression, Operator, Statement},
         },
     };
 
     #[test]
- fn test_parse_let_statement() {
+    fn test_parse_let_statement() {
         let source = "let x := 10;
         let y := 20; 
         let foobar := 8383;
@@ -573,8 +613,7 @@ mod tests {
         let n := 'n';
         let a := \"Hello, World\n\";
         let num := 1_000_000.00;
-        let scientific := 1_123.45e-6;
-        ";
+        let scientific := 1_123.45e-6;";
 
         let mut lexer = Lexer::new(source);
 
@@ -586,7 +625,9 @@ mod tests {
                         assert_eq!(program.statements.len(), 8);
 
                         match &program.statements[0] {
-                            Statement::Let { identifier, value, .. } => {
+                            Statement::Let {
+                                identifier, value, ..
+                            } => {
                                 assert_eq!(identifier, "x");
                                 match value {
                                     Expression::Number { val, .. } => assert_eq!(*val, 10.00),
@@ -596,7 +637,9 @@ mod tests {
                             _ => panic!("invalid statement"),
                         }
                         match &program.statements[1] {
-                            Statement::Let { identifier, value, .. } => {
+                            Statement::Let {
+                                identifier, value, ..
+                            } => {
                                 assert_eq!(identifier, "y");
                                 match value {
                                     Expression::Number { val, .. } => assert_eq!(*val, 20.00),
@@ -606,7 +649,9 @@ mod tests {
                             _ => panic!("invalid statement"),
                         }
                         match &program.statements[2] {
-                            Statement::Let { identifier, value, .. } => {
+                            Statement::Let {
+                                identifier, value, ..
+                            } => {
                                 assert_eq!(identifier, "foobar");
                                 match value {
                                     Expression::Number { val, .. } => assert_eq!(*val, 8383.00),
@@ -616,7 +661,9 @@ mod tests {
                             _ => panic!("invalid statement"),
                         }
                         match &program.statements[3] {
-                            Statement::Let { identifier, value, .. } => {
+                            Statement::Let {
+                                identifier, value, ..
+                            } => {
                                 assert_eq!(identifier, "new_foobar");
                                 match value {
                                     Expression::Boolean { val, .. } => assert_eq!(*val, true),
@@ -626,7 +673,9 @@ mod tests {
                             _ => panic!("invalid statement"),
                         }
                         match &program.statements[4] {
-                            Statement::Let { identifier, value, .. } => {
+                            Statement::Let {
+                                identifier, value, ..
+                            } => {
                                 assert_eq!(identifier, "n");
                                 match value {
                                     Expression::Char { val, .. } => assert_eq!(*val, 'n'),
@@ -636,27 +685,37 @@ mod tests {
                             _ => panic!("invalid statement"),
                         }
                         match &program.statements[5] {
-                            Statement::Let { identifier, value, .. } => {
+                            Statement::Let {
+                                identifier, value, ..
+                            } => {
                                 assert_eq!(identifier, "a");
                                 match value {
-                                    Expression::String { val, .. } => assert_eq!(val, "Hello, World\n"),
+                                    Expression::String { val, .. } => {
+                                        assert_eq!(val, "Hello, World\n")
+                                    }
                                     _ => panic!("invalid expression"),
                                 }
                             }
                             _ => panic!("invalid statement"),
                         }
                         match &program.statements[6] {
-                            Statement::Let { identifier, value, .. } => {
+                            Statement::Let {
+                                identifier, value, ..
+                            } => {
                                 assert_eq!(identifier, "num");
                                 match value {
-                                    Expression::Number { val, .. } => assert_eq!(*val, 1_000_000.00),
+                                    Expression::Number { val, .. } => {
+                                        assert_eq!(*val, 1_000_000.00)
+                                    }
                                     _ => panic!("invalid expression"),
                                 }
                             }
                             _ => panic!("invalid statement"),
                         }
                         match &program.statements[7] {
-                            Statement::Let { identifier, value, .. } => {
+                            Statement::Let {
+                                identifier, value, ..
+                            } => {
                                 assert_eq!(identifier, "scientific");
                                 match value {
                                     Expression::Number { val, .. } => assert_eq!(*val, 1123.45e-6),
@@ -718,6 +777,79 @@ mod tests {
                     "parser failed to identify the let statements - {}",
                     reporter
                 )
+            }
+        };
+    }
+
+    #[test]
+    fn test_parse_prefix_expression() {
+        let source = "!false;
+        -100;
+        +10;
+        --10;
+        ++10;
+        !true";
+
+        let mut lexer = Lexer::new(source);
+
+        let parser_res = Parser::new(&mut lexer);
+        match parser_res {
+            Ok(mut parser) => {
+                match parser.parse_program() {
+                    Ok(program) => {
+                        assert_eq!(program.statements.len(), 6);
+                        match &program.statements[0] {
+                            Statement::Expression { span: _, expr } => match expr {
+                                Expression::PrefixExpression {
+                                    span: _,
+                                    op: Operator::Negation { span: _ },
+                                    right_expr,
+                                } => match **right_expr {
+                                    Expression::Boolean { span: _, val } => assert_eq!(val, false),
+                                    _ => panic!(
+                                        "parser failed to identify the expression as boolean"
+                                    ),
+                                },
+                                _ => panic!(
+                                    "parser failed to identify the expression as a prefix expression"
+                                ),
+                            },
+                            _ => panic!(
+                                "parser failed to identify the statement as an expression statements"
+                            ),
+                        }
+                        match &program.statements[5] {
+                            Statement::Expression { span: _, expr } => match expr {
+                                Expression::PrefixExpression {
+                                    span: _,
+                                    op: Operator::Negation { span: _ },
+                                    right_expr,
+                                } => match **right_expr {
+                                    Expression::Boolean { span: _, val } => assert_eq!(val, true),
+                                    _ => panic!(
+                                        "parser failed to identify the expression as boolean"
+                                    ),
+                                },
+                                _ => panic!(
+                                    "parser failed to identify the expression as a prefix expression"
+                                ),
+                            },
+                            _ => panic!(
+                                "parser failed to identify the statement as an expression statements"
+                            ),
+                        }
+                    }
+                    Err(err) => {
+                        let line_map = LineMap::new(source);
+                        let reporter = Report::new(&source, line_map, &*err);
+                        panic!("parser failed to parse program - {}", reporter)
+                    }
+                };
+            }
+            Err(err) => {
+                let line_map = LineMap::new(source);
+                let reporter = Report::new(&source, line_map, &*err);
+                panic!("parser failed to initialize - {}", reporter)
             }
         };
     }
