@@ -50,7 +50,9 @@ impl<'a> Lexer<'a> {
         match ch {
             c if c.is_alphabetic() || c.eq(&'_') => self.read_word(),
             c if c.is_digit(10) => self.read_number(),
-            ':' | '=' | '>' | '<' | '!' | '&' | '|' | '*' | '/' | '+' | '-' => self.read_operator(),
+            ':' | '=' | '>' | '<' | '!' | '&' | '|' | '*' | '/' | '+' | '-' | '.' => {
+                self.read_operator()
+            }
             ';' | ',' | '(' | ')' | '[' | ']' | '{' | '}' => self.read_punctuation(),
             '"' => self.read_string(),
             '\'' => self.read_char(),
@@ -105,6 +107,7 @@ impl<'a> Lexer<'a> {
             '-' => self
                 .read_two_char_operator('-', TokenType::Dec)
                 .unwrap_or(TokenType::Minus),
+            '.' => TokenType::Dot,
             '*' => TokenType::Asterix,
             '/' => TokenType::Slash,
             _ => TokenType::Illegal,
