@@ -21,14 +21,15 @@ pub enum TokenType {
     Not,    // !
     And,    // &&
     Or,     // ||
-    Inc,    // ++
-    Dec,    // --
 
+    Inc,     // ++
+    Dec,     // --
     Asterix, // *
     Slash,   // /
     Plus,    // +
     Minus,   // -
     Dot,     // .
+    Mod,     // %
 
     Semicolon,  // ;
     Comma,      // ,
