@@ -50,7 +50,7 @@ impl<'a> Lexer<'a> {
         match ch {
             c if c.is_alphabetic() || c.eq(&'_') => self.read_word(),
             c if c.is_digit(10) => self.read_number(),
-            ':' | '=' | '>' | '<' | '!' | '&' | '|' | '*' | '/' | '+' | '-' | '.' => {
+            ':' | '=' | '>' | '<' | '!' | '&' | '|' | '*' | '/' | '+' | '-' | '.' | '%' => {
                 self.read_operator()
             }
             ';' | ',' | '(' | ')' | '[' | ']' | '{' | '}' => self.read_punctuation(),
@@ -110,6 +110,7 @@ impl<'a> Lexer<'a> {
             '.' => TokenType::Dot,
             '*' => TokenType::Asterix,
             '/' => TokenType::Slash,
+            '%' => TokenType::Mod,
             _ => TokenType::Illegal,
         };
         self.advance();
