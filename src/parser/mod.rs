@@ -110,7 +110,7 @@ impl<'a> Parser<'a> {
         self.advance()?;
         self.advance()?;
 
-        let expr = self.parse_expression(Precedence::Lowest)?;
+        let expr = self.parse_expression(Precedence::Lowest as i8)?;
 
         self.advance()?;
         if !self.curr_token_is(TokenType::Semicolon) {
@@ -160,7 +160,7 @@ impl<'a> Parser<'a> {
             });
         }
         self.advance()?;
-        let expr = self.parse_expression(Precedence::Lowest)?;
+        let expr = self.parse_expression(Precedence::Lowest as i8)?;
         self.advance()?;
         if !self.curr_token_is(TokenType::Semicolon) {
             return Err(Box::new(ParserError::UnexpectedToken {
@@ -186,7 +186,7 @@ impl<'a> Parser<'a> {
 
     fn parse_expression_statement(&mut self) -> Result<ast::Statement<'a>, Box<dyn Diagnostic>> {
         let start_span = self.curr_token.as_ref().unwrap().span;
-        let expr = self.parse_expression(Precedence::Lowest)?;
+        let expr = self.parse_expression(Precedence::Lowest as i8)?;
         let end_span = self.curr_token.as_ref().unwrap().span;
         if self.curr_token_is(TokenType::Semicolon) {
             self.advance()?;
@@ -256,7 +256,7 @@ impl<'a> Parser<'a> {
         }
 
         self.advance()?;
-        let fn_block = self.parse_expression(Precedence::Lowest)?;
+        let fn_block = self.parse_expression(Precedence::Lowest as i8)?;
 
         self.advance()?;
         if !self.curr_token_is(TokenType::RBrace) {
@@ -285,12 +285,75 @@ impl<'a> Parser<'a> {
 
     fn parse_expression(
         &mut self,
-        precedence: Precedence,
+        min_precedence: i8,
     ) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
         let prefix_fn = Self::get_prefix_parse_fn(self.curr_token.as_ref().unwrap().t_type);
         if let Some(prefix_fn) = prefix_fn {
-            let left = prefix_fn(self)?;
-            // TODO: Handle infix and postfix expressions once implemented
+            let mut left = prefix_fn(self)?;
+            loop {
+                if self.peek_token_is(TokenType::Semicolon)
+                    || self.peek_token_is(TokenType::RBrace)
+                    || self.peek_token_is(TokenType::Eof)
+                {
+                    break;
+                }
+
+                let mut binding_power = Precedence::postfix_operator_binding_power(
+                    self.peek_token.as_ref().unwrap().t_type,
+                );
+
+                if binding_power.0 > -1 {
+                    if binding_power.0 < min_precedence {
+                        break;
+                    }
+                    self.advance()?;
+
+                    let postfix_fn = match Self::get_postfix_parse_fn(
+                        self.curr_token.as_ref().unwrap().t_type,
+                    ) {
+                        Some(func) => func,
+                        None => {
+                            return Err(Box::new(ParserError::UnexpectedToken {
+                                expected: "postfix operator".to_string(),
+                                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                                span: self.curr_token.as_ref().unwrap().span,
+                                hint: None,
+                            }));
+                        }
+                    };
+
+                    left = postfix_fn(self, left)?;
+                    continue;
+                }
+
+                binding_power = Precedence::infix_operator_binding_power(
+                    self.peek_token.as_ref().unwrap().t_type,
+                );
+
+                if binding_power.0 > -1 {
+                    if binding_power.0 < min_precedence {
+                        break;
+                    }
+
+                    self.advance()?;
+
+                    let infix_fn =
+                        match Self::get_infix_parse_fn(self.curr_token.as_ref().unwrap().t_type) {
+                            Some(func) => func,
+                            None => {
+                                return Err(Box::new(ParserError::UnexpectedToken {
+                                    expected: "infix operator".to_string(),
+                                    found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                                    span: self.curr_token.as_ref().unwrap().span,
+                                    hint: None,
+                                }));
+                            }
+                        };
+                    left = infix_fn(self, left)?;
+                    continue;
+                }
+                break;
+            }
             Ok(left)
         } else {
             Err(Box::new(ParserError::UnexpectedToken {
@@ -321,7 +384,7 @@ impl<'a> Parser<'a> {
         };
 
         self.advance()?;
-        let rhs = self.parse_expression(Precedence::Prefix)?;
+        let rhs = self.parse_expression(Precedence::Prefix as i8)?;
         let end_span = self.curr_token.as_ref().unwrap().span;
         self.advance()?;
 
@@ -341,14 +404,69 @@ impl<'a> Parser<'a> {
         &mut self,
         lhs: ast::Expression<'a>,
     ) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
-        todo!()
+        let start_span = lhs.span();
+        let operator_token = self.curr_token.as_ref().unwrap();
+        let operator_binding_power =
+            Precedence::infix_operator_binding_power(operator_token.t_type);
+        let operator = match Operator::new(operator_token.t_type, operator_token.span) {
+            Some(op) => op,
+            None => {
+                return Err(Box::new(ParserError::UnexpectedToken {
+                    expected: "binary operator".to_string(),
+                    found: operator_token.lexeme.to_string(),
+                    span: operator_token.span,
+                    hint: None,
+                }));
+            }
+        };
+
+        self.advance()?;
+        let rhs = self.parse_expression(operator_binding_power.1)?;
+        let end_span = rhs.span();
+        Ok(Expression::InfixExpression {
+            span: Span {
+                start_byte_pos: start_span.start_byte_pos,
+                end_byte_pos: end_span.end_byte_pos,
+                line_num: start_span.line_num,
+                col_num: start_span.col_num,
+            },
+            left_expr: Box::new(lhs),
+            op: operator,
+            right_expr: Box::new(rhs),
+        })
     }
 
     fn parse_postfix_expression(
         &mut self,
-        lhs: ast::Expression,
+        lhs: ast::Expression<'a>,
     ) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
-        todo!()
+        let start_span = lhs.span();
+
+        let operator_token = self.curr_token.as_ref().unwrap();
+        let operator = match Operator::new(operator_token.t_type, operator_token.span) {
+            Some(op) => op,
+            None => {
+                return Err(Box::new(ParserError::UnexpectedToken {
+                    expected: "unary postfix operator".to_string(),
+                    found: operator_token.lexeme.to_string(),
+                    span: operator_token.span,
+                    hint: None,
+                }));
+            }
+        };
+
+        let end_span = self.curr_token.as_ref().unwrap().span;
+
+        Ok(Expression::PostfixExpression {
+            span: Span {
+                start_byte_pos: start_span.start_byte_pos,
+                end_byte_pos: end_span.end_byte_pos,
+                line_num: start_span.line_num,
+                col_num: start_span.col_num,
+            },
+            left_expr: Box::new(lhs),
+            op: operator,
+        })
     }
 
     fn curr_token_is(&self, t_type: TokenType) -> bool {
@@ -416,11 +534,11 @@ impl<'a> Parser<'a> {
             return Ok(args_list);
         }
 
-        args_list.push(self.parse_expression(Precedence::Lowest)?);
+        args_list.push(self.parse_expression(Precedence::Lowest as i8)?);
 
         while self.curr_token_is(TokenType::Comma) {
             self.advance()?;
-            args_list.push(self.parse_expression(Precedence::Lowest)?);
+            args_list.push(self.parse_expression(Precedence::Lowest as i8)?);
         }
         Ok(args_list)
     }
@@ -866,16 +984,84 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_infix_expression() {
-        let source = "!false;
-        -100;
-        +10;
-        --10;
-        ++10;
-        !true";
-
+    #[test]
+    fn test_infix_expression() {
+        let source = "x + y;";
         let mut lexer = Lexer::new(source);
+        let mut parser = Parser::new(&mut lexer).unwrap();
+        let program = parser.parse_program().unwrap();
+        assert_eq!(program.statements.len(), 1);
+        match &program.statements[0] {
+            Statement::Expression { expr, .. } => match expr {
+                Expression::InfixExpression {
+                    left_expr,
+                    op,
+                    right_expr,
+                    span,
+                } => {
+                    assert!(matches!(
+                        left_expr.as_ref(),
+                        Expression::Identifier {
+                            identifier: "x",
+                            ..
+                        }
+                    ));
+                    assert!(matches!(op, Operator::Plus { .. }));
+                    assert!(matches!(
+                        right_expr.as_ref(),
+                        Expression::Identifier {
+                            identifier: "y",
+                            ..
+                        }
+                    ));
+                    assert_eq!(span.start_byte_pos, 0);
+                    assert_eq!(span.end_byte_pos, 5);
+                }
+                _ => panic!("Expected infix expression"),
+            },
+            _ => panic!("Expected expression statement"),
+        }
+    }
 
-        let parser_res = Parser::new(&mut lexer);
+    #[test]
+    fn test_postfix_expression() {
+        let source = "x++;";
+        let mut lexer = Lexer::new(source);
+        let mut parser = Parser::new(&mut lexer).unwrap();
+        let program = parser.parse_program().unwrap();
+        assert_eq!(program.statements.len(), 1);
+        match &program.statements[0] {
+            Statement::Expression { expr, .. } => match expr {
+                Expression::PostfixExpression {
+                    left_expr,
+                    op,
+                    span,
+                } => {
+                    assert!(matches!(
+                        left_expr.as_ref(),
+                        Expression::Identifier {
+                            identifier: "x",
+                            ..
+                        }
+                    ));
+                    assert!(matches!(op, Operator::Increment { .. }));
+                    assert_eq!(span.start_byte_pos, 0);
+                    assert_eq!(span.end_byte_pos, 4);
+                }
+                _ => panic!("Expected postfix expression"),
+            },
+            _ => panic!("Expected expression statement"),
+        }
+    }
+
+    #[test]
+    fn test_invalid_infix() {
+        let source = "x + ;";
+        let mut lexer = Lexer::new(source);
+        let mut parser = Parser::new(&mut lexer).unwrap();
+        let result = parser.parse_program();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.message().contains("expected expression"));
     }
 }
