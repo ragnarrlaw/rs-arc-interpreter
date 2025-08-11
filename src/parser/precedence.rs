@@ -1,11 +1,11 @@
 use std::i8;
 
-use crate::lexer::token::{Token, TokenType};
+use crate::lexer::token::TokenType;
 
 pub type OperatorPrecedence = (i8, i8);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(u8)]
+#[repr(i8)]
 pub enum Precedence {
     Lowest = 0,     // Lowest precedence (e.g., commas)
     Assignment,     // :=, +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=
