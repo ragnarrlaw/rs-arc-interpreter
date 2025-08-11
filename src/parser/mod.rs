@@ -15,10 +15,14 @@ pub mod ast;
 pub mod precedence;
 
 type ParsePrefixFn<'a> = fn(&mut Parser<'a>) -> Result<Expression<'a>, Box<dyn Diagnostic>>;
-type ParseInfixFn<'a> =
-    fn(parser: &mut Parser<'a>, lhs: Expression<'a>) -> Result<Expression<'a>, Box<dyn Diagnostic>>;
-type ParsePostfixFn<'a> =
-    fn(parser: &mut Parser<'a>, lhs: Expression<'a>) -> Result<Expression<'a>, Box<dyn Diagnostic>>;
+type ParseInfixFn<'a> = fn(
+    parser: &mut Parser<'a>,
+    lhs: ast::Expression<'a>,
+) -> Result<Expression<'a>, Box<dyn Diagnostic>>;
+type ParsePostfixFn<'a> = fn(
+    parser: &mut Parser<'a>,
+    lhs: ast::Expression<'a>,
+) -> Result<Expression<'a>, Box<dyn Diagnostic>>;
 
 #[derive(Debug)]
 struct Parser<'a> {
@@ -68,9 +72,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /*
-     * let x := 10;
-     * */
     fn parse_let_statement(&mut self) -> Result<ast::Statement<'a>, Box<dyn Diagnostic>> {
         if !self.curr_token_is(TokenType::Let) {
             self.advance()?;
@@ -183,19 +184,6 @@ impl<'a> Parser<'a> {
         })
     }
 
-    /*
-     * expressions that appear at the hightest level
-     *
-     * >> 5
-     * >> 10 + 10
-     * >> 10
-     * >> "string"
-     * >> {
-     * >>   let x = 10;
-     * >>   x + 20
-     * >> }
-     *
-     * */
     fn parse_expression_statement(&mut self) -> Result<ast::Statement<'a>, Box<dyn Diagnostic>> {
         let start_span = self.curr_token.as_ref().unwrap().span;
         let expr = self.parse_expression(Precedence::Lowest)?;
@@ -214,11 +202,6 @@ impl<'a> Parser<'a> {
         })
     }
 
-    /*
-     * fn function_definition(param_1, param_2, param_3) {
-     *    // code
-     * }
-     * */
     fn parse_fn_definition(&mut self) -> Result<ast::Statement<'a>, Box<dyn Diagnostic>> {
         if !self.curr_token_is(TokenType::Function) {
             return Err(Box::new(ParserError::UnexpectedToken {
@@ -354,6 +337,20 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_infix_expression(
+        &mut self,
+        lhs: ast::Expression<'a>,
+    ) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
+        todo!()
+    }
+
+    fn parse_postfix_expression(
+        &mut self,
+        lhs: ast::Expression,
+    ) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
+        todo!()
+    }
+
     fn curr_token_is(&self, t_type: TokenType) -> bool {
         self.curr_token.as_ref().is_some_and(|t| t.t_type == t_type)
     }
@@ -446,12 +443,26 @@ impl<'a> Parser<'a> {
 
     fn get_infix_parse_fn(token_type: TokenType) -> Option<ParseInfixFn<'a>> {
         match token_type {
+            TokenType::Plus
+            | TokenType::Slash
+            | TokenType::Minus
+            | TokenType::Asterix
+            | TokenType::Mod
+            | TokenType::Dot
+            | TokenType::Gt
+            | TokenType::Lt
+            | TokenType::Or
+            | TokenType::And
+            | TokenType::EqEq
+            | TokenType::LtEq
+            | TokenType::GtEq => Some(Self::parse_infix_expression),
             _ => None,
         }
     }
 
     fn get_postfix_parse_fn(token_type: TokenType) -> Option<ParsePostfixFn<'a>> {
         match token_type {
+            TokenType::Inc | TokenType::Dec => Some(Self::parse_postfix_expression),
             _ => None,
         }
     }
@@ -522,7 +533,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    // processes escape sequences in strings and characters (e.g., "\n", "\uXXXX").
+    // helper: processes escape sequences in strings and characters (e.g., "\n", "\uXXXX").
     fn process_escape_sequences(lexeme: &str, span: Span) -> Result<String, Box<dyn Diagnostic>> {
         let mut result = String::new();
         let mut chars = lexeme.chars().peekable();
@@ -852,5 +863,19 @@ mod tests {
                 panic!("parser failed to initialize - {}", reporter)
             }
         };
+    }
+
+    #[test]
+    fn test_parse_infix_expression() {
+        let source = "!false;
+        -100;
+        +10;
+        --10;
+        ++10;
+        !true";
+
+        let mut lexer = Lexer::new(source);
+
+        let parser_res = Parser::new(&mut lexer);
     }
 }
