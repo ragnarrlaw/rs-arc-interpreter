@@ -42,6 +42,17 @@ pub enum Statement<'a> {
     },
 }
 
+impl<'a> Statement<'a> {
+    pub fn span(&self) -> Span {
+        match self {
+            Self::Let { span, .. } => *span,
+            Self::Return { span, .. } => *span,
+            Self::Expression { span, .. } => *span,
+            Self::FunctionDef { span, .. } => *span,
+        }
+    }
+}
+
 impl<'a> Display for Statement<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -216,6 +227,25 @@ impl<'a> Display for Expression<'a> {
                 span: _,
             } => write!(f, "<identifier>: {}", identifier),
             _ => todo!(),
+        }
+    }
+}
+
+impl<'a> Expression<'a> {
+    pub fn span(&self) -> Span {
+        match self {
+            Self::Number { span, .. } => *span,
+            Self::String { span, .. } => *span,
+            Self::Boolean { span, .. } => *span,
+            Self::Char { span, .. } => *span,
+            Self::Identifier { span, .. } => *span,
+            Self::PrefixExpression { span, .. } => *span,
+            Self::InfixExpression { span, .. } => *span,
+            Self::PostfixExpression { span, .. } => *span,
+            Self::Block { span, .. } => *span,
+            Self::If { span, .. } => *span,
+            Self::Lambda { span, .. } => *span,
+            Self::FnCall { span, .. } => *span,
         }
     }
 }
