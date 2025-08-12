@@ -554,6 +554,7 @@ impl<'a> Parser<'a> {
             | TokenType::Or
             | TokenType::And
             | TokenType::EqEq
+            | TokenType::NotEq
             | TokenType::LtEq
             | TokenType::GtEq => Some(Self::parse_infix_expression),
             _ => None,
@@ -708,11 +709,12 @@ mod tests {
     use std::panic;
 
     use crate::{
-        error::report::{self, Report},
+        error::report::Report,
         lexer::Lexer,
         line_map::LineMap,
         parser::{
-            ast::{Expression, Operator, Statement}, Parser
+            Parser,
+            ast::{Expression, Operator, Statement},
         },
     };
 
@@ -968,11 +970,21 @@ mod tests {
 
     #[test]
     fn test_infix_expression() {
-        let source = "x + y;";
+        let source = "x + y;
+        x - y;
+        x / y;
+        x * y;
+        x % y;
+        x > y;
+        x < y;
+        x >= y;
+        x <= y;
+        x == y;
+        x != y;";
         let mut lexer = Lexer::new(source);
         let mut parser = Parser::new(&mut lexer).unwrap();
         let program = parser.parse_program().unwrap();
-        assert_eq!(program.statements.len(), 1);
+        assert_eq!(program.statements.len(), 11);
         match &program.statements[0] {
             Statement::Expression { expr, .. } => match expr {
                 Expression::InfixExpression {
@@ -1054,5 +1066,35 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.message().contains("expected expression"));
+    }
+
+    #[test]
+    fn test_operator_precedence_parsing() {
+        let source = "-a * b;
+        !-a;
+        a + b + c;
+        a + b - c;
+        a * b * c;
+        a * b / c;
+        a + b * c + d / e - f;
+        5 > 4 == 3 < 4;
+        5 < 4 != 3 > 4;
+        3 + 4 * 5 == 3 * 1 + 4 * 5;
+        3 + 4 * 5 == 3 * 1 + 4 * 5;
+        a + b; - 5 * 5
+        ";
+        let mut lexer = Lexer::new(source);
+        let mut parser = Parser::new(&mut lexer).unwrap();
+
+        match parser.parse_program() {
+            Ok(p) => {
+                assert_eq!(p.statements.len(), 13);
+            }
+            Err(err) => {
+                let line_map = LineMap::new(source);
+                let reporter = Report::new(source, line_map, &*err);
+                panic!("failed to parse the program - {}", reporter);
+            }
+        };
     }
 }
