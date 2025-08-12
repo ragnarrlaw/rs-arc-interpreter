@@ -58,6 +58,7 @@ impl<'a> Parser<'a> {
             .is_some_and(|t| t.t_type != TokenType::Eof)
         {
             stmts.push(self.parse_statement()?);
+            self.advance()?;
         }
         Ok(Program { statements: stmts })
     }
@@ -73,18 +74,6 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_let_statement(&mut self) -> Result<ast::Statement<'a>, Box<dyn Diagnostic>> {
-        if !self.curr_token_is(TokenType::Let) {
-            self.advance()?;
-            return Err(Box::new(ParserError::UnexpectedToken {
-                expected: "let".to_string(),
-                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
-                span: self.curr_token.as_ref().unwrap().span,
-                hint: Some(format!(
-                    "let bindings start with \"let\" keyword. e.g. let x := 10;"
-                )),
-            }));
-        }
-
         let start_span = self.curr_token.as_ref().unwrap().span;
         if !self.peek_token_is(TokenType::Identifier) {
             self.advance()?;
@@ -98,7 +87,7 @@ impl<'a> Parser<'a> {
         self.advance()?;
         let identifier = self.curr_token.as_ref().unwrap().lexeme.to_string();
 
-        if !self.peek_token_is(TokenType::Assign) {
+        if !self.check_peek_token_and_advance(TokenType::Assign)? {
             self.advance()?;
             return Err(Box::new(ParserError::UnexpectedToken {
                 expected: ":=".to_string(),
@@ -108,8 +97,6 @@ impl<'a> Parser<'a> {
             }));
         }
         self.advance()?;
-        self.advance()?;
-
         let expr = self.parse_expression(Precedence::Lowest as i8)?;
 
         self.advance()?;
@@ -121,7 +108,6 @@ impl<'a> Parser<'a> {
             }));
         }
         let end_span = self.curr_token.as_ref().unwrap().span;
-        self.advance()?;
         Ok(Statement::Let {
             span: Span {
                 start_byte_pos: start_span.start_byte_pos,
@@ -135,18 +121,8 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_return_statement(&mut self) -> Result<ast::Statement<'a>, Box<dyn Diagnostic>> {
-        if !self.curr_token_is(TokenType::Return) {
-            self.advance()?;
-            return Err(Box::new(ParserError::UnexpectedToken {
-                expected: "return".to_string(),
-                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
-                span: self.curr_token.as_ref().unwrap().span,
-                hint: Some(format!("return statements begins with \"return\" keyword")),
-            }));
-        }
         let start_span = self.curr_token.as_ref().unwrap().span;
-        if self.peek_token_is(TokenType::Semicolon) {
-            self.advance()?;
+        if self.check_peek_token_and_advance(TokenType::Semicolon)? {
             let end_span = self.curr_token.as_ref().unwrap().span;
             self.advance()?;
             return Ok(Statement::Return {
@@ -161,18 +137,19 @@ impl<'a> Parser<'a> {
         }
         self.advance()?;
         let expr = self.parse_expression(Precedence::Lowest as i8)?;
-        self.advance()?;
-        if !self.curr_token_is(TokenType::Semicolon) {
+
+        if !self.check_peek_token_and_advance(TokenType::Semicolon)? {
             return Err(Box::new(ParserError::UnexpectedToken {
-                expected: "return".to_string(),
+                expected: ";".to_string(),
                 found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
                 span: self.curr_token.as_ref().unwrap().span,
-                hint: Some(format!("return statements begins with \"return\" keyword")),
+                hint: Some(format!(
+                    "return statements ends with a semicolon(;) e.g. return <expression>;"
+                )),
             }));
         }
 
         let end_span = self.curr_token.as_ref().unwrap().span;
-        self.advance()?;
         Ok(Statement::Return {
             span: Span {
                 start_byte_pos: start_span.start_byte_pos,
@@ -188,8 +165,8 @@ impl<'a> Parser<'a> {
         let start_span = self.curr_token.as_ref().unwrap().span;
         let expr = self.parse_expression(Precedence::Lowest as i8)?;
         let end_span = self.curr_token.as_ref().unwrap().span;
-        if self.curr_token_is(TokenType::Semicolon) {
-            self.advance()?;
+        if self.peek_token_is(TokenType::Semicolon) {
+            self.advance()?
         }
         Ok(Statement::Expression {
             span: Span {
@@ -203,50 +180,43 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_fn_definition(&mut self) -> Result<ast::Statement<'a>, Box<dyn Diagnostic>> {
-        if !self.curr_token_is(TokenType::Function) {
-            return Err(Box::new(ParserError::UnexpectedToken {
-                expected: "fn".to_string(),
-                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
-                span: self.curr_token.as_ref().unwrap().span,
-                hint: Some(format!("function definitions starts with \"fn\" keyword")),
-            }));
-        }
         let start_span = self.curr_token.as_ref().unwrap().span;
 
-        self.advance()?;
-        if !self.curr_token_is(TokenType::Identifier) {
+        if !self.check_peek_token_and_advance(TokenType::Identifier)? {
+            self.advance()?;
             return Err(Box::new(ParserError::UnexpectedToken {
                 expected: "identifier".to_string(),
                 found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
                 span: self.curr_token.as_ref().unwrap().span,
-                hint: Some("function definitions require an identifier. e.g. fn <func_identifier> (<params_list>) {<code>}".to_string()),
+                hint: Some("function definitions require an identifier. e.g. fn <identifier> (<params_list>) {<code>}".to_string()),
             }));
         }
         let identifier = self.curr_token.as_ref().unwrap().lexeme.to_string();
 
-        self.advance()?;
-        if !self.curr_token_is(TokenType::LParen) {
+        if !self.check_peek_token_and_advance(TokenType::LParen)? {
+            self.advance()?;
             return Err(Box::new(ParserError::UnexpectedToken {
                 expected: "(".to_string(),
                 found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
                 span: self.curr_token.as_ref().unwrap().span,
-                hint: None,
+                hint: Some("parameter lists should be surrounded by parenthesis. e.g. fn <identifier> (<params_list>) {<code>}".to_string()),
             }));
         }
 
-        self.advance()?;
         let params_list = self.read_function_params()?;
 
         if !self.curr_token_is(TokenType::RParen) {
             return Err(Box::new(ParserError::MissingToken {
                 missing: ")".to_string(),
                 span: self.curr_token.as_ref().unwrap().span,
-                hint: Some("unclosed parameter list. close the list by adding a ).".to_string()),
+                hint: Some(
+                    "unclosed parameter list. close the parameter list by adding a ).".to_string(),
+                ),
             }));
         }
 
-        self.advance()?;
-        if !self.curr_token_is(TokenType::LBrace) {
+        if !self.check_peek_token_and_advance(TokenType::LBrace)? {
+            self.advance()?;
             return Err(Box::new(ParserError::UnexpectedToken {
                 expected: "{".to_string(),
                 found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
@@ -255,11 +225,10 @@ impl<'a> Parser<'a> {
             }));
         }
 
-        self.advance()?;
         let fn_block = self.parse_expression(Precedence::Lowest as i8)?;
 
-        self.advance()?;
-        if !self.curr_token_is(TokenType::RBrace) {
+        if !self.check_peek_token_and_advance(TokenType::RBrace)? {
+            self.advance()?;
             return Err(Box::new(ParserError::UnexpectedToken {
                 expected: "}".to_string(),
                 found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
@@ -269,7 +238,6 @@ impl<'a> Parser<'a> {
         }
 
         let end_span = self.curr_token.as_ref().unwrap().span;
-        self.advance()?;
         Ok(Statement::FunctionDef {
             span: Span {
                 start_byte_pos: start_span.start_byte_pos,
@@ -383,10 +351,12 @@ impl<'a> Parser<'a> {
             }
         };
 
+        let operator_binding_power =
+            Precedence::prefix_operator_binding_power(self.curr_token.as_ref().unwrap().t_type);
+
         self.advance()?;
-        let rhs = self.parse_expression(Precedence::Prefix as i8)?;
+        let rhs = self.parse_expression(operator_binding_power.1)?;
         let end_span = self.curr_token.as_ref().unwrap().span;
-        self.advance()?;
 
         Ok(Expression::PrefixExpression {
             span: Span {
@@ -475,6 +445,18 @@ impl<'a> Parser<'a> {
 
     fn peek_token_is(&self, t_type: TokenType) -> bool {
         self.peek_token.as_ref().is_some_and(|t| t.t_type == t_type)
+    }
+
+    fn check_peek_token_and_advance(
+        &mut self,
+        expected_token_type: TokenType,
+    ) -> Result<bool, Box<dyn Diagnostic>> {
+        if self.peek_token_is(expected_token_type) {
+            self.advance()?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     fn sync(&mut self, sync_tokens: &[TokenType]) -> Result<(), Box<dyn Diagnostic>> {
@@ -723,13 +705,14 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::panic;
+
     use crate::{
-        error::report::Report,
+        error::report::{self, Report},
         lexer::Lexer,
         line_map::LineMap,
         parser::{
-            Parser,
-            ast::{Expression, Operator, Statement},
+            ast::{Expression, Operator, Statement}, Parser
         },
     };
 
@@ -984,7 +967,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn test_infix_expression() {
         let source = "x + y;";
         let mut lexer = Lexer::new(source);
@@ -1025,33 +1007,42 @@ mod tests {
 
     #[test]
     fn test_postfix_expression() {
-        let source = "x++;";
+        let source = "x++;
+        y++;";
         let mut lexer = Lexer::new(source);
         let mut parser = Parser::new(&mut lexer).unwrap();
-        let program = parser.parse_program().unwrap();
-        assert_eq!(program.statements.len(), 1);
-        match &program.statements[0] {
-            Statement::Expression { expr, .. } => match expr {
-                Expression::PostfixExpression {
-                    left_expr,
-                    op,
-                    span,
-                } => {
-                    assert!(matches!(
-                        left_expr.as_ref(),
-                        Expression::Identifier {
-                            identifier: "x",
-                            ..
+        match parser.parse_program() {
+            Ok(p) => {
+                assert_eq!(p.statements.len(), 2);
+                match &p.statements[0] {
+                    Statement::Expression { expr, .. } => match expr {
+                        Expression::PostfixExpression {
+                            left_expr,
+                            op,
+                            span,
+                        } => {
+                            assert!(matches!(
+                                left_expr.as_ref(),
+                                Expression::Identifier {
+                                    identifier: "x",
+                                    ..
+                                }
+                            ));
+                            assert!(matches!(op, Operator::Increment { .. }));
+                            assert_eq!(span.start_byte_pos, 0);
+                            assert_eq!(span.end_byte_pos, 3);
                         }
-                    ));
-                    assert!(matches!(op, Operator::Increment { .. }));
-                    assert_eq!(span.start_byte_pos, 0);
-                    assert_eq!(span.end_byte_pos, 4);
+                        _ => panic!("Expected postfix expression"),
+                    },
+                    _ => panic!("Expected expression statement"),
                 }
-                _ => panic!("Expected postfix expression"),
-            },
-            _ => panic!("Expected expression statement"),
-        }
+            }
+            Err(err) => {
+                let line_map = LineMap::new(source);
+                let reporter = Report::new(source, line_map, &*err);
+                panic!("failed to parse the program - {}", reporter);
+            }
+        };
     }
 
     #[test]
