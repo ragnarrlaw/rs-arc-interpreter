@@ -225,7 +225,23 @@ impl<'a> Display for Expression<'a> {
             Self::Identifier {
                 identifier,
                 span: _,
-            } => write!(f, "<identifier>: {}", identifier),
+            } => write!(f, "<Identifier>: {}", identifier),
+            Self::PrefixExpression {
+                span: _,
+                op,
+                right_expr,
+            } => write!(f, "({}{})", op, right_expr),
+            Self::InfixExpression {
+                span: _,
+                left_expr,
+                op,
+                right_expr,
+            } => write!(f, "({} {} {})", left_expr, op, right_expr),
+            Self::PostfixExpression {
+                span: _,
+                left_expr,
+                op,
+            } => write!(f, "({}{})", left_expr, op),
             _ => todo!(),
         }
     }
