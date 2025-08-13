@@ -439,6 +439,30 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_grouped_expression(&mut self) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
+        let start_span = self.curr_token.as_ref().unwrap().span;
+        self.advance()?;
+
+        let expr = self.parse_expression(Precedence::Lowest as i8)?;
+
+        if !self.check_peek_token_and_advance(TokenType::RParen)? {
+            self.advance()?;
+            let end_span = self.curr_token.as_ref().unwrap().span;
+            Err(Box::new(ParserError::MissingToken {
+                missing: ")".to_string(),
+                span: Span {
+                    start_byte_pos: start_span.start_byte_pos,
+                    end_byte_pos: end_span.end_byte_pos,
+                    line_num: start_span.line_num,
+                    col_num: start_span.col_num,
+                },
+                hint: Some("grouepd expression should be enclosed in parenthesis".to_string()),
+            }))
+        } else {
+            Ok(expr)
+        }
+    }
+
     fn curr_token_is(&self, t_type: TokenType) -> bool {
         self.curr_token.as_ref().is_some_and(|t| t.t_type == t_type)
     }
@@ -527,6 +551,7 @@ impl<'a> Parser<'a> {
 
     fn get_prefix_parse_fn(token_type: TokenType) -> Option<ParsePrefixFn<'a>> {
         match token_type {
+            TokenType::LParen => Some(Self::parse_grouped_expression),
             TokenType::Identifier => Some(Self::parse_identifier),
             TokenType::Number => Some(Self::parse_number_literal),
             TokenType::String => Some(Self::parse_string_literal),
@@ -969,7 +994,7 @@ mod tests {
     }
 
     #[test]
-    fn test_infix_expression() {
+    fn test_parse_infix_expression() {
         let source = "x + y;
         x - y;
         x / y;
@@ -1018,7 +1043,7 @@ mod tests {
     }
 
     #[test]
-    fn test_postfix_expression() {
+    fn test_parse_postfix_expression() {
         let source = "x++;
         y++;";
         let mut lexer = Lexer::new(source);
@@ -1058,7 +1083,7 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_infix() {
+    fn test_parse_invalid_infix() {
         let source = "x + ;";
         let mut lexer = Lexer::new(source);
         let mut parser = Parser::new(&mut lexer).unwrap();
@@ -1069,7 +1094,7 @@ mod tests {
     }
 
     #[test]
-    fn test_operator_precedence_parsing() {
+    fn test_parse_operator_precedence_in_expressions() {
         let source = "-a * b;
         !-a;
         a + b + c;
@@ -1194,5 +1219,69 @@ mod tests {
                 panic!("failed to parse the program - {}", reporter);
             }
         };
+    }
+
+    #[test]
+    fn test_parse_grouped_expressions() {
+        let source = "1 + (2 + 3) + 4;
+        (5 + 5) * 2;
+        2 / (5 + 5);
+        -(5 + 5);
+        !(true == true);
+        ";
+        let mut lexer = Lexer::new(source);
+        let mut parser = Parser::new(&mut lexer).unwrap();
+        let program = parser.parse_program();
+        match program {
+            Ok(p) => {
+                match &p.statements[0] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "((<Number>: 1 + (<Number>: 2 + <Number>: 3)) + <Number>: 4)"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[1] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "((<Number>: 5 + <Number>: 5) * <Number>: 2)"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[2] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "(<Number>: 2 / (<Number>: 5 + <Number>: 5))"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[3] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(format!("{}", expr), "(-(<Number>: 5 + <Number>: 5))");
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[4] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "(!(<Boolean>: true == <Boolean>: true))"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+            }
+            Err(err) => {
+                let line_map = LineMap::new(source);
+                let reporter = Report::new(source, line_map, &*err);
+                panic!("failed to parse the program - {}", reporter);
+            }
+        }
     }
 }
