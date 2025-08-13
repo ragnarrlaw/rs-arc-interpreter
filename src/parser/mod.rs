@@ -1080,7 +1080,6 @@ mod tests {
         5 > 4 == 3 < 4;
         5 < 4 != 3 > 4;
         3 + 4 * 5 == 3 * 1 + 4 * 5;
-        3 + 4 * 5 == 3 * 1 + 4 * 5;
         a + b; - 5 * 5
         ";
         let mut lexer = Lexer::new(source);
@@ -1088,7 +1087,106 @@ mod tests {
 
         match parser.parse_program() {
             Ok(p) => {
-                assert_eq!(p.statements.len(), 13);
+                assert_eq!(p.statements.len(), 12);
+                match &p.statements[0] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "((-<Identifier>: a) * <Identifier>: b)"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[1] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(format!("{}", expr), "(!(-<Identifier>: a))");
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[2] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "((<Identifier>: a + <Identifier>: b) + <Identifier>: c)"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[3] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "((<Identifier>: a + <Identifier>: b) - <Identifier>: c)"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[4] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "((<Identifier>: a * <Identifier>: b) * <Identifier>: c)"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[5] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "((<Identifier>: a * <Identifier>: b) / <Identifier>: c)"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[6] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "(((<Identifier>: a + (<Identifier>: b * <Identifier>: c)) + (<Identifier>: d / <Identifier>: e)) - <Identifier>: f)"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[7] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "((<Number>: 5 > <Number>: 4) == (<Number>: 3 < <Number>: 4))"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[8] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "((<Number>: 5 < <Number>: 4) != (<Number>: 3 > <Number>: 4))"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[9] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(
+                            format!("{}", expr),
+                            "((<Number>: 3 + (<Number>: 4 * <Number>: 5)) == ((<Number>: 3 * <Number>: 1) + (<Number>: 4 * <Number>: 5)))"
+                        );
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[10] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(format!("{}", expr), "(<Identifier>: a + <Identifier>: b)");
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+                match &p.statements[11] {
+                    Statement::Expression { span: _, expr } => {
+                        assert_eq!(format!("{}", expr), "((-<Number>: 5) * <Number>: 5)");
+                    }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
             }
             Err(err) => {
                 let line_map = LineMap::new(source);
