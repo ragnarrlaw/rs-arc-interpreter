@@ -15,7 +15,7 @@ impl<'a> Display for Program<'a> {
         for stmt in &self.statements {
             tmp_f.push_str(&format!("{}\n", stmt));
         }
-        write!(f, "<Program>\n{}", tmp_f)
+        write!(f, "<Program>: \n{}", tmp_f)
     }
 }
 
@@ -60,12 +60,12 @@ impl<'a> Display for Statement<'a> {
                 span: _,
                 identifier,
                 value,
-            } => write!(f, "<binding> {} := {};", identifier, value),
+            } => write!(f, "<Binding> {} := {};", identifier, value),
             Self::Return { span: _, value } => match value {
-                Some(expr) => write!(f, "<return> {};", expr),
-                None => write!(f, "<return>"),
+                Some(expr) => write!(f, "<Return> {};", expr),
+                None => write!(f, "<Return>;"),
             },
-            Self::Expression { span: _, expr } => write!(f, "<expression> {}", expr),
+            Self::Expression { span: _, expr } => write!(f, "<Expression> {}", expr),
             Self::FunctionDef {
                 span: _,
                 identifier,
@@ -73,7 +73,7 @@ impl<'a> Display for Statement<'a> {
                 body,
             } => write!(
                 f,
-                "<fn def>:{} <params>:{} <body>: {}",
+                "<Fn-def>:{} <Params>:{} <Body>: {}",
                 identifier,
                 params.join(", "),
                 body
@@ -242,7 +242,58 @@ impl<'a> Display for Expression<'a> {
                 left_expr,
                 op,
             } => write!(f, "({}{})", left_expr, op),
-            _ => todo!(),
+            Self::Block {
+                span: _,
+                statements,
+                return_expr,
+            } => {
+                let mut tmp_f = String::new();
+                tmp_f.push_str("{\n");
+                for stmt in statements {
+                    tmp_f.push_str(&format!("\t{}\n", stmt));
+                }
+                if let Some(expr) = return_expr {
+                    tmp_f.push_str(&format!("\t{}\n", expr))
+                }
+                tmp_f.push('}');
+                write!(f, "<Block>: {}", tmp_f)
+            }
+            Self::If {
+                span: _,
+                condition,
+                consequence,
+                alternative,
+            } => {
+                let mut tmp_f = String::new();
+                tmp_f.push_str(&format!(
+                    "<If>: {} <Consequnce>: {}",
+                    condition, consequence,
+                ));
+                if let Some(expr) = alternative {
+                    tmp_f.push_str(&format!("<Alternative>: {}", expr))
+                }
+                write!(f, "{}", tmp_f)
+            }
+            Self::FnCall {
+                span: _,
+                func,
+                args,
+            } => {
+                write!(f, "<FnCall>: <Identifier>: {} <Params-list>: {}", func, {
+                    let mut tmp_f = String::new();
+                    for arg in args {
+                        tmp_f.push_str(&format!("{}, ", arg));
+                    }
+                    tmp_f
+                })
+            }
+            Self::Lambda {
+                span: _,
+                params,
+                body,
+            } => {
+                write!(f, "<Lambda>: <Params-list>: {} {}", params.join(", "), body)
+            }
         }
     }
 }
