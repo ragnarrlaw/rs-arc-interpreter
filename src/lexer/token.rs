@@ -30,6 +30,7 @@ pub enum TokenType {
     Minus,   // -
     Dot,     // .
     Mod,     // %
+    TypeOf,  // typeof
 
     Semicolon,  // ;
     Comma,      // ,
