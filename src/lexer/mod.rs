@@ -334,6 +334,7 @@ impl<'a> Lexer<'a> {
             "return" => TokenType::Return,
             "true" => TokenType::True,
             "false" => TokenType::False,
+            "typeof" => TokenType::TypeOf,
             _ => TokenType::Identifier,
         };
         Ok(Token::new(
