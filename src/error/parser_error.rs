@@ -17,6 +17,16 @@ pub enum ParserError {
         hint: Option<String>,
     },
     InvalidEscapeSequence(String, Span),
+    InvalidUseOfReturnStatement {
+        case: String,
+        span: Span,
+        hint: Option<String>,
+    },
+    InvalidUseOfExpressionStatement {
+        case: String,
+        span: Span,
+        hint: Option<String>,
+    },
 }
 
 impl Diagnostic for ParserError {
@@ -32,10 +42,7 @@ impl Diagnostic for ParserError {
                 format!("invalid number value {lexeme} found")
             }
             Self::UnexpectedToken {
-                expected,
-                found,
-                span: _,
-                hint: _,
+                expected, found, ..
             } => {
                 if expected.is_empty() {
                     format!("unexpected {found} token found")
@@ -43,15 +50,17 @@ impl Diagnostic for ParserError {
                     format!("expected {expected}, but found {found}")
                 }
             }
-            Self::MissingToken {
-                missing,
-                span: _,
-                hint: _,
-            } => {
+            Self::MissingToken { missing, .. } => {
                 format!("missing {missing} token")
             }
             Self::InvalidEscapeSequence(seq, _) => {
-                format!("Invalid escape sequence '{}' found", seq)
+                format!("Invalid escape sequence '{seq}' found")
+            }
+            Self::InvalidUseOfReturnStatement { case, .. } => {
+                format!("invalid use of return statement found '{case}'")
+            }
+            Self::InvalidUseOfExpressionStatement { case, .. } => {
+                format!("invalid use of an expression {case}")
             }
         }
     }
@@ -61,34 +70,20 @@ impl Diagnostic for ParserError {
             Self::InvalidExponent(_, span) => *span,
             Self::InvalidCharValue(_, span) => *span,
             Self::InvalidNumberValue(_, span) => *span,
-            Self::UnexpectedToken {
-                expected: _,
-                found: _,
-                span,
-                hint: _,
-            } => *span,
-            Self::MissingToken {
-                missing: _,
-                span,
-                hint: _,
-            } => *span,
+            Self::UnexpectedToken { span, .. } => *span,
+            Self::MissingToken { span, .. } => *span,
             Self::InvalidEscapeSequence(_, span) => *span,
+            Self::InvalidUseOfReturnStatement { span, .. } => *span,
+            Self::InvalidUseOfExpressionStatement { span, .. } => *span,
         }
     }
 
     fn help(&self) -> Option<String> {
         match self {
-            ParserError::UnexpectedToken {
-                expected: _,
-                found: _,
-                span: _,
-                hint,
-            } => hint.clone(),
-            ParserError::MissingToken {
-                missing: _,
-                span: _,
-                hint,
-            } => hint.clone(),
+            Self::UnexpectedToken { hint, .. } => hint.clone(),
+            Self::MissingToken { hint, .. } => hint.clone(),
+            Self::InvalidUseOfReturnStatement { hint, .. } => hint.clone(),
+            Self::InvalidUseOfExpressionStatement { hint, .. } => hint.clone(),
             _ => None,
         }
     }
