@@ -463,14 +463,215 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /**
+    parse if expressions
+    if (<condition>) { <consequence> }
+                    or
+    if (<condition>) { <consequence> } else { <alternative> }
+    */
+    fn parse_if_expression(&mut self) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
+        let start_span = self.curr_token.as_ref().unwrap().span;
+        self.advance()?;
+
+        let condition_expr = self.parse_expression(Precedence::Lowest as i8)?;
+
+        if !self.check_peek_token_and_advance(TokenType::LBrace)? {
+            self.advance()?;
+            let end_span = self.curr_token.as_ref().unwrap().span;
+            return Err(Box::new(ParserError::UnexpectedToken {
+                expected: "{".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: Span {
+                    start_byte_pos: start_span.start_byte_pos,
+                    end_byte_pos: end_span.end_byte_pos,
+                    line_num: start_span.line_num,
+                    col_num: start_span.col_num,
+                },
+                hint: Some("if-else expressions should have a consequence. e.g. if <condition> {<consequence>} else {<alternative>}".to_string()),
+            }));
+        }
+
+        let consequence_blk = self.parse_block_expression()?;
+
+        if !self.curr_token_is(TokenType::RBrace) {
+            self.advance()?;
+            let end_span = self.curr_token.as_ref().unwrap().span;
+            return Err(Box::new(ParserError::UnexpectedToken {
+                expected: "}".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: Span {
+                    start_byte_pos: start_span.start_byte_pos,
+                    end_byte_pos: end_span.end_byte_pos,
+                    line_num: start_span.line_num,
+                    col_num: start_span.col_num,
+                },
+                hint: Some("unclosed code block > { // code } ".to_string()),
+            }));
+        }
+        self.advance()?;
+
+        if self.curr_token_is(TokenType::Else) {
+            self.advance()?;
+            if !self.curr_token_is(TokenType::LBrace) {
+                self.advance()?;
+                let end_span = self.curr_token.as_ref().unwrap().span;
+                return Err(Box::new(ParserError::UnexpectedToken {
+                expected: "{".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: Span {
+                    start_byte_pos: start_span.start_byte_pos,
+                    end_byte_pos: end_span.end_byte_pos,
+                    line_num: start_span.line_num,
+                    col_num: start_span.col_num,
+                },
+                hint: Some("else alternative blocks start with {. e.g. if <condition> {<consequence>} else {<alternative>}".to_string())}));
+            } else {
+                let alternative_blk = self.parse_block_expression()?;
+                if !self.curr_token_is(TokenType::RBrace) {
+                    self.advance()?;
+                    let end_span = self.curr_token.as_ref().unwrap().span;
+                    Err(Box::new(ParserError::UnexpectedToken {
+                        expected: "}".to_string(),
+                        found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                        span: Span {
+                            start_byte_pos: start_span.start_byte_pos,
+                            end_byte_pos: end_span.end_byte_pos,
+                            line_num: start_span.line_num,
+                            col_num: start_span.col_num,
+                        },
+                        hint: Some("unclosed code block > { // code } ".to_string()),
+                    }))
+                } else {
+                    let end_span = self.curr_token.as_ref().unwrap().span;
+                    self.advance()?;
+                    Ok(Expression::If {
+                        span: Span {
+                            start_byte_pos: start_span.start_byte_pos,
+                            end_byte_pos: end_span.end_byte_pos,
+                            line_num: start_span.line_num,
+                            col_num: start_span.col_num,
+                        },
+                        condition: Box::new(condition_expr),
+                        consequence: Box::new(consequence_blk),
+                        alternative: Some(Box::new(alternative_blk)),
+                    })
+                }
+            }
+        } else {
+            let end_span = self.curr_token.as_ref().unwrap().span;
+            Ok(Expression::If {
+                span: Span {
+                    start_byte_pos: start_span.start_byte_pos,
+                    end_byte_pos: end_span.end_byte_pos,
+                    line_num: start_span.line_num,
+                    col_num: start_span.col_num,
+                },
+                condition: Box::new(condition_expr),
+                consequence: Box::new(consequence_blk),
+                alternative: None,
+            })
+        }
+    }
+
+    /**
+    parse block statements {<statements>} or {<expression>}
+    at the time of calling this function, current token should be a LBRACE ({)
+    function exits after moving to the RBRACE(}) token or after meeting an early END_OF_FILE ('\0')
+    */
+    fn parse_block_expression(&mut self) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
+        let start_span = self.curr_token.as_ref().unwrap().span;
+        self.advance()?;
+        let mut block_stmts: Vec<Statement> = vec![];
+        let mut return_stmt: Option<Box<Expression>> = None;
+        loop {
+            if self.curr_token_is(TokenType::RBrace) || self.curr_token_is(TokenType::Eof) {
+                break;
+            }
+            let stmt = self.parse_statement()?;
+            match stmt {
+                Statement::Expression { span: _, expr } => {
+                    if !self.peek_token_is(TokenType::RBrace) {
+                        self.advance()?;
+                        let end_span = self.curr_token.as_ref().unwrap().span;
+                        return Err(Box::new(ParserError::InvalidUseOfExpressionStatement {
+                            case: "an expression can only be used as the last statement in a block statement".to_string(),
+                            span: Span {
+                                start_byte_pos: start_span.start_byte_pos,
+                                end_byte_pos: end_span.end_byte_pos,
+                                line_num: start_span.line_num,
+                                col_num: start_span.col_num,
+                            },
+                            hint: Some("try adding a (;) at the end of the expression".to_string()),
+                        }));
+                    } else {
+                        return_stmt = Some(Box::new(expr));
+                    }
+                }
+                Statement::Return { span: _, value } => {
+                    if !self.peek_token_is(TokenType::RBrace) {
+                        self.advance()?;
+                        let end_span = self.curr_token.as_ref().unwrap().span;
+                        return Err(Box::new(ParserError::InvalidUseOfReturnStatement  {
+                            case: "more statements after the return statement".to_string(),
+                            span: Span {
+                                start_byte_pos: start_span.start_byte_pos,
+                                end_byte_pos: end_span.end_byte_pos,
+                                line_num: start_span.line_num,
+                                col_num: start_span.col_num,
+                            },
+                            hint: Some("return statements can only be used as the final statement inside of a block".to_string()),
+                        }));
+                    } else {
+                        return_stmt = value.map(|expr| Box::new(expr));
+                    }
+                }
+                _ => block_stmts.push(stmt),
+            };
+            self.advance()?;
+        }
+        let end_span = self.curr_token.as_ref().unwrap().span;
+        Ok(Expression::Block {
+            span: Span {
+                start_byte_pos: start_span.start_byte_pos,
+                end_byte_pos: end_span.end_byte_pos,
+                line_num: start_span.line_num,
+                col_num: start_span.col_num,
+            },
+            statements: block_stmts,
+            return_expr: return_stmt,
+        })
+    }
+
+    /**
+    parse function literals (lambda functions)
+    fn <parameters> { <body> }
+    (<parameters>) -> (parameter0, parameter1, parameter2, ...)
+    */
+    fn parse_fn_expression(&mut self) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
+        todo!()
+    }
+
+    /**
+    parse function calls
+    <expression>(<comma separated expression>)
+    e.g. add(1, 2), add(1, multiply(10, 40)), fn(a,b){a+b}(10, 20) and
+    higher_order(fn(a,b){a+b})
+     */
+    fn parse_fn_call(&mut self) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
+        todo!()
+    }
+
+    /// assert current token's type
     fn curr_token_is(&self, t_type: TokenType) -> bool {
         self.curr_token.as_ref().is_some_and(|t| t.t_type == t_type)
     }
 
+    /// assert next token's type
     fn peek_token_is(&self, t_type: TokenType) -> bool {
         self.peek_token.as_ref().is_some_and(|t| t.t_type == t_type)
     }
 
+    /// if the next token is the expected token advance the parser, used to enforce constructs
     fn check_peek_token_and_advance(
         &mut self,
         expected_token_type: TokenType,
@@ -483,6 +684,10 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /**
+    if an erroneous construct is met, synchronizes the lexer to the beginning of the next
+    construct of end of file, whichever comes first
+    */
     fn sync(&mut self, sync_tokens: &[TokenType]) -> Result<(), Box<dyn Diagnostic>> {
         while self
             .curr_token
@@ -495,9 +700,11 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    // fn function_def (param1, param2, param3)
-    //                  ^                    ^
-    // read paramter alists
+    /**
+    helper function used for parsing function parameters
+    <parameters> -> (parameter0, parameter1, parameter2, ...)
+                     ^                                     ^
+    */
     fn read_function_params(&mut self) -> Result<Vec<String>, Box<dyn Diagnostic>> {
         let mut param_list: Vec<String> = vec![];
         if self.curr_token_is(TokenType::RParen) {
@@ -531,9 +738,12 @@ impl<'a> Parser<'a> {
         Ok(param_list)
     }
 
-    // call(arg1, arg2, arg3)
-    //      ^              ^
-    // read function argument list
+    /**
+    parse function call arguments
+    (<comma separated expressions>)
+    call(arg1, arg2, arg3)
+         ^              ^
+    */
     fn read_function_args(&mut self) -> Result<Vec<Expression<'a>>, Box<dyn Diagnostic>> {
         let mut args_list: Vec<Expression<'a>> = vec![];
         if self.curr_token_is(TokenType::RParen) {
@@ -552,6 +762,7 @@ impl<'a> Parser<'a> {
     fn get_prefix_parse_fn(token_type: TokenType) -> Option<ParsePrefixFn<'a>> {
         match token_type {
             TokenType::LParen => Some(Self::parse_grouped_expression),
+            TokenType::If => Some(Self::parse_if_expression),
             TokenType::Identifier => Some(Self::parse_identifier),
             TokenType::Number => Some(Self::parse_number_literal),
             TokenType::String => Some(Self::parse_string_literal),
@@ -1274,6 +1485,118 @@ mod tests {
                             "(!(<Boolean>: true == <Boolean>: true))"
                         );
                     }
+                    _ => panic!("failed to identify the statement as an expression statement"),
+                }
+            }
+            Err(err) => {
+                let line_map = LineMap::new(source);
+                let reporter = Report::new(source, line_map, &*err);
+                panic!("failed to parse the program - {}", reporter);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_if_expressions() {
+        let source = "if x < y { x } else { y }";
+        let mut lexer = Lexer::new(source);
+        let mut parser = Parser::new(&mut lexer).unwrap();
+        let program = parser.parse_program();
+        match program {
+            Ok(p) => {
+                assert_eq!(p.statements.len(), 1);
+                match &p.statements[0] {
+                    Statement::Expression { span: _, expr } => match expr {
+                        Expression::If {
+                            span: _,
+                            condition,
+                            consequence,
+                            alternative,
+                        } => {
+                            match &**condition {
+                                Expression::InfixExpression {
+                                    span: _,
+                                    left_expr,
+                                    op,
+                                    right_expr,
+                                } => {
+                                    match &**left_expr {
+                                        Expression::Identifier {
+                                            identifier,
+                                            span: _,
+                                        } => assert_eq!(*identifier, "x"),
+                                        _ => panic!(
+                                            "failed to identify the left expression of the if-else expression"
+                                        ),
+                                    }
+                                    assert!(matches!(op, Operator::LessThan { span: _ }));
+                                    match **right_expr {
+                                        Expression::Identifier {
+                                            identifier,
+                                            span: _,
+                                        } => assert_eq!(identifier, "y"),
+                                        _ => panic!(
+                                            "failed to identify the left expression of the if-else expression"
+                                        ),
+                                    }
+                                }
+                                _ => panic!(
+                                    "failed to identify the infix expression in the condition of if-else block"
+                                ),
+                            }
+                            match &**consequence {
+                                Expression::Block {
+                                    statements,
+                                    return_expr,
+                                    ..
+                                } => {
+                                    assert_eq!(statements.len(), 0);
+                                    match return_expr {
+                                        Some(expr) => match **expr {
+                                            Expression::Identifier {
+                                                identifier,
+                                                span: _,
+                                            } => assert_eq!(identifier, "x"),
+                                            _ => panic!(
+                                                "failed to identify the identifier in the return expression"
+                                            ),
+                                        },
+                                        None => panic!("failed to identify the return expression"),
+                                    }
+                                }
+                                _ => panic!(
+                                    "failed to identify the consequence code block of the if expression"
+                                ),
+                            }
+                            match alternative {
+                                Some(alt) => match &**alt {
+                                    Expression::Block {
+                                        span: _,
+                                        statements,
+                                        return_expr,
+                                    } => {
+                                        assert_eq!(statements.len(), 0);
+                                        match **return_expr.as_ref().unwrap() {
+                                            Expression::Identifier {
+                                                identifier,
+                                                span: _,
+                                            } => assert_eq!("y", identifier),
+                                            _ => panic!(
+                                                "failed to identifier the returned identifier"
+                                            ),
+                                        }
+                                    }
+                                    _ => panic!(
+                                        "failed to identify the expression inside of the alternative code block"
+                                    ),
+                                },
+                                None => panic!(
+                                    "failed to identify the alternative code block of the if expression"
+                                ),
+                            }
+                        }
+                        _ => panic!("failed to identify the expression as an if-else expression"),
+                    },
                     _ => panic!("failed to identify the statement as an expression statement"),
                 }
             }
