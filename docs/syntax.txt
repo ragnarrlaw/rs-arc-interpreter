@@ -1,45 +1,54 @@
-~~~~~~~~~~~~~~~~~~~~ARC LANGUAGE SYNTAX~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Single line comment -> // this is a comment
-Multi-line comment -> /* this comment can span multiple lines */
+~~~~~~~~~~~~~~~~~~~~~~~~~ARC LANGUAGE SPECIFICATION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Data types
 ~~~~~~~~~~
+1. Number - A floating-number (64bit) that unifies integers, floating-point numbers and scientific numbers
+2. Boolean - Formal logical boolean values, includes true and false
+3. Char - Basic unicode (UTF8) characters
+4. String - Basically an array of characters
 
-
-Let bindings
-~~~~~~~~~~~~
+Let bindings or assignments
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 let <identifier> := <expression>;
 
 let num = 10;
 let boolean_val = true;
 let string_value = "hello, world!";
-let obj1 = {
+
+// implicit return
+let num1 = {
   let y = "Inner scope";
   10
 };
 
+// explicit return
+let num2 = {
+  let y = "Inner scope";
+  return 20;
+};
+
 Function Definitions
 ~~~~~~~~~~~~~~~~~~~~
-
 fn <identifier> (<parameter list>) {
   // code
 }
 
-fn func_1 (a, b) {
+fn func_identifier (a, b) {
   a + b
+}
+
+fn func_with_return (a, b) {
+  return a + b;
 }
 
 Lambda fucntions
 ~~~~~~~~~~~~~~~~
-
 let lambda = fn (<parameter list>) {
   //code
 };
 
 Code blocks
 ~~~~~~~~~~~
-
 fn func_1 () {
   let calc = {
     let x = 10;
@@ -47,5 +56,17 @@ fn func_1 () {
     x + y // or return x + y;
   };
 }
+
+Comment constructs
+~~~~~~~~~~~~~~~~~~
+Single line comment -> // this is a single line comment (inline comment)
+Multi-line comment -> 
+/*
+      this 
+      comment 
+      can 
+      span 
+      multiple lines
+*/
 
 
