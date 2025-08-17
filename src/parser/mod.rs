@@ -1816,6 +1816,97 @@ mod tests {
                 panic!("failed to parse the program - {}", reporter);
             }
         }
+
+        let source = "let function_def := fn (param1, param2, param3, param4) {
+            let result := param1 + param2 + param3 + param4;
+            result
+        }(1,2,3,4);";
+        let mut lexer = Lexer::new(source);
+        let mut parser = Parser::new(&mut lexer).unwrap();
+        let program = parser.parse_program();
+        match program {
+            Ok(p) => {
+                assert_eq!(p.statements.len(), 1);
+                match &p.statements[0] {
+                    Statement::Let {
+                        span: _,
+                        identifier,
+                        value,
+                    } => {
+                        assert_eq!(identifier, "function_def");
+                        match value {
+                            Expression::FnCall {
+                                span: _,
+                                func,
+                                args,
+                            } => {
+                                match &**func {
+                                    Expression::Lambda {
+                                        span: _,
+                                        params,
+                                        body,
+                                    } => {
+                                        assert_eq!(params.len(), 4);
+                                        assert_eq!(params[0], "param1");
+                                        assert_eq!(params[1], "param2");
+                                        assert_eq!(params[2], "param3");
+                                        assert_eq!(params[3], "param4");
+                                        match &**body {
+                                            Expression::Block {
+                                                span: _,
+                                                statements,
+                                                return_expr,
+                                            } => {
+                                                assert_eq!(statements.len(), 1);
+                                                match return_expr {
+                                                    Some(expr) => {
+                                                        assert!(matches!(
+                                                            **expr,
+                                                            Expression::Identifier {
+                                                                identifier: "result",
+                                                                ..
+                                                            }
+                                                        ))
+                                                    }
+                                                    None => panic!(
+                                                        "parser failed to identify the return expression of the function literal body as an indetfier"
+                                                    ),
+                                                }
+                                            }
+                                            _ => panic!(
+                                                "parser failed to identify the body of the function literal as a block expression"
+                                            ),
+                                        }
+                                    }
+                                    _ => panic!(
+                                        "parser failed to identify the lambda expression of the rhs in let statement"
+                                    ),
+                                }
+                                assert_eq!(args.len(), 4);
+                                assert!(matches!(
+                                    args[..],
+                                    [
+                                        Expression::Number { val: 1.0, .. },
+                                        Expression::Number { val: 2.0, .. },
+                                        Expression::Number { val: 3.0, .. },
+                                        Expression::Number { val: 4.0, .. },
+                                    ]
+                                ));
+                            }
+                            _ => panic!(
+                                "parser failed to identify the rhs expression of the let expression as a function call"
+                            ),
+                        }
+                    }
+                    _ => panic!("parser failed to identify the let expression"),
+                }
+            }
+            Err(err) => {
+                let line_map = LineMap::new(source);
+                let reporter = Report::new(source, line_map, &*err);
+                panic!("failed to parse the program - {}", reporter);
+            }
+        }
     }
 
     #[test]
