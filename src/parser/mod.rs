@@ -202,7 +202,7 @@ impl<'a> Parser<'a> {
                 hint: Some("parameter lists should be surrounded by parenthesis. e.g. fn <identifier> (<params_list>) {<code>}".to_string()),
             }));
         }
-
+        self.advance()?;
         let params_list = self.read_function_params()?;
 
         if !self.curr_token_is(TokenType::RParen) {
@@ -225,9 +225,9 @@ impl<'a> Parser<'a> {
             }));
         }
 
-        let fn_block = self.parse_expression(Precedence::Lowest as i8)?;
+        let fn_block = self.parse_block_expression()?;
 
-        if !self.check_peek_token_and_advance(TokenType::RBrace)? {
+        if !self.curr_token_is(TokenType::RBrace) {
             self.advance()?;
             return Err(Box::new(ParserError::UnexpectedToken {
                 expected: "}".to_string(),
@@ -594,14 +594,14 @@ impl<'a> Parser<'a> {
                         self.advance()?;
                         let end_span = self.curr_token.as_ref().unwrap().span;
                         return Err(Box::new(ParserError::InvalidUseOfExpressionStatement {
-                            case: "an expression can only be used as the last statement in a block statement".to_string(),
+                            case: "can only be used as the last statement in a block statement".to_string(),
                             span: Span {
                                 start_byte_pos: start_span.start_byte_pos,
                                 end_byte_pos: end_span.end_byte_pos,
                                 line_num: start_span.line_num,
                                 col_num: start_span.col_num,
                             },
-                            hint: Some("try adding a (;) at the end of the expression".to_string()),
+                            hint: Some("try adding a (;) at the end of the expression or try closing the code block".to_string()),
                         }));
                     } else {
                         return_stmt = Some(Box::new(expr));
@@ -645,10 +645,74 @@ impl<'a> Parser<'a> {
     /**
     parse function literals (lambda functions)
     fn <parameters> { <body> }
-    (<parameters>) -> (parameter0, parameter1, parameter2, ...)
+    <parameters> -> parameter0, parameter1, parameter2, ...
     */
-    fn parse_fn_expression(&mut self) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
-        todo!()
+    fn parse_fn_literal(&mut self) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
+        let start_span = self.curr_token.as_ref().unwrap().span;
+        if !self.check_peek_token_and_advance(TokenType::LParen)? {
+            self.advance()?;
+            let end_span = self.curr_token.as_ref().unwrap().span;
+            return Err(Box::new(ParserError::UnexpectedToken {
+                expected: "(".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: Span {
+                    start_byte_pos: start_span.start_byte_pos,
+                    end_byte_pos: end_span.end_byte_pos,
+                    line_num: start_span.line_num,
+                    col_num: start_span.col_num,
+                },
+                hint: Some("missing ( at the start of the parameter list. e.g. fn (<parameter-list>) {<body>})".to_string()),
+            }));
+        }
+
+        self.advance()?;
+        let params_list = self.read_function_params()?;
+
+        if !self.check_peek_token_and_advance(TokenType::LBrace)? {
+            self.advance()?;
+            let end_span = self.curr_token.as_ref().unwrap().span;
+            return Err(Box::new(ParserError::UnexpectedToken {
+                expected: "{".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: Span {
+                    start_byte_pos: start_span.start_byte_pos,
+                    end_byte_pos: end_span.end_byte_pos,
+                    line_num: start_span.line_num,
+                    col_num: start_span.col_num,
+                },
+                hint: Some("missing { at the start of the function body. e.g. fn (<parameter-list>) {<body>})".to_string()),
+            }));
+        }
+
+        let fn_body = self.parse_block_expression()?;
+        if !self.curr_token_is(TokenType::RBrace) {
+            self.advance()?;
+            let end_span = self.curr_token.as_ref().unwrap().span;
+            return Err(Box::new(ParserError::UnexpectedToken {
+                expected: "}".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: Span {
+                    start_byte_pos: start_span.start_byte_pos,
+                    end_byte_pos: end_span.end_byte_pos,
+                    line_num: start_span.line_num,
+                    col_num: start_span.col_num,
+                },
+                hint: Some("unclosed code block > { <body> } ".to_string()),
+            }));
+        }
+
+        let end_span = self.curr_token.as_ref().unwrap().span;
+
+        Ok(Expression::Lambda {
+            span: Span {
+                start_byte_pos: start_span.start_byte_pos,
+                end_byte_pos: end_span.end_byte_pos,
+                line_num: start_span.line_num,
+                col_num: start_span.col_num,
+            },
+            params: params_list,
+            body: Box::new(fn_body),
+        })
     }
 
     /**
@@ -657,8 +721,39 @@ impl<'a> Parser<'a> {
     e.g. add(1, 2), add(1, multiply(10, 40)), fn(a,b){a+b}(10, 20) and
     higher_order(fn(a,b){a+b})
      */
-    fn parse_fn_call(&mut self) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
-        todo!()
+    fn parse_fn_call(
+        &mut self,
+        function: ast::Expression<'a>,
+    ) -> Result<ast::Expression<'a>, Box<dyn Diagnostic>> {
+        let start_span = self.curr_token.as_ref().unwrap().span;
+        self.advance()?;
+        let args_list = self.read_function_args()?;
+        if !self.curr_token_is(TokenType::RParen) {
+            self.advance()?;
+            let end_span = self.curr_token.as_ref().unwrap().span;
+            return Err(Box::new(ParserError::UnexpectedToken {
+                expected: "(".to_string(),
+                found: self.curr_token.as_ref().unwrap().lexeme.to_string(),
+                span: Span {
+                    start_byte_pos: start_span.start_byte_pos,
+                    end_byte_pos: end_span.end_byte_pos,
+                    line_num: start_span.line_num,
+                    col_num: start_span.col_num,
+                },
+                hint: Some("unclosed parameter list, add a )".to_string()),
+            }));
+        }
+        let end_span = self.curr_token.as_ref().unwrap().span;
+        Ok(Expression::FnCall {
+            span: Span {
+                start_byte_pos: start_span.start_byte_pos,
+                end_byte_pos: end_span.end_byte_pos,
+                line_num: start_span.line_num,
+                col_num: start_span.col_num,
+            },
+            func: Box::new(function),
+            args: args_list,
+        })
     }
 
     /// assert current token's type
@@ -751,18 +846,20 @@ impl<'a> Parser<'a> {
         }
 
         args_list.push(self.parse_expression(Precedence::Lowest as i8)?);
-
+        self.advance()?;
         while self.curr_token_is(TokenType::Comma) {
             self.advance()?;
             args_list.push(self.parse_expression(Precedence::Lowest as i8)?);
+            self.advance()?;
         }
         Ok(args_list)
     }
 
     fn get_prefix_parse_fn(token_type: TokenType) -> Option<ParsePrefixFn<'a>> {
         match token_type {
-            TokenType::LParen => Some(Self::parse_grouped_expression),
             TokenType::If => Some(Self::parse_if_expression),
+            TokenType::Function => Some(Self::parse_fn_literal),
+            TokenType::LParen => Some(Self::parse_grouped_expression),
             TokenType::Identifier => Some(Self::parse_identifier),
             TokenType::Number => Some(Self::parse_number_literal),
             TokenType::String => Some(Self::parse_string_literal),
@@ -779,6 +876,7 @@ impl<'a> Parser<'a> {
 
     fn get_infix_parse_fn(token_type: TokenType) -> Option<ParseInfixFn<'a>> {
         match token_type {
+            TokenType::LParen => Some(Self::parse_fn_call),
             TokenType::Plus
             | TokenType::Slash
             | TokenType::Minus
@@ -949,7 +1047,7 @@ mod tests {
         lexer::Lexer,
         line_map::LineMap,
         parser::{
-            Parser,
+            self, Parser,
             ast::{Expression, Operator, Statement},
         },
     };
@@ -1598,6 +1696,174 @@ mod tests {
                         _ => panic!("failed to identify the expression as an if-else expression"),
                     },
                     _ => panic!("failed to identify the statement as an expression statement"),
+                }
+            }
+            Err(err) => {
+                let line_map = LineMap::new(source);
+                let reporter = Report::new(source, line_map, &*err);
+                panic!("failed to parse the program - {}", reporter);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_fn_definition() {
+        let source = "fn function_def(param1, param2, param3, param4) {
+            let result := param1 + param2 + param3 + param4;
+            result
+        }";
+        let mut lexer = Lexer::new(source);
+        let mut parser = Parser::new(&mut lexer).unwrap();
+        let program = parser.parse_program();
+        match program {
+            Ok(p) => {
+                assert_eq!(p.statements.len(), 1);
+                match &p.statements[0] {
+                    Statement::FunctionDef {
+                        span: _,
+                        identifier,
+                        params,
+                        body: _,
+                    } => {
+                        assert_eq!(identifier, "function_def");
+                        assert_eq!(params.len(), 4);
+                        assert_eq!(params[0], "param1");
+                        assert_eq!(params[1], "param2");
+                        assert_eq!(params[2], "param3");
+                        assert_eq!(params[3], "param4");
+                    }
+                    _ => panic!(
+                        "parser failed to identify the statement as a function definition statement"
+                    ),
+                }
+            }
+            Err(err) => {
+                let line_map = LineMap::new(source);
+                let reporter = Report::new(source, line_map, &*err);
+                panic!("failed to parse the program - {}", reporter);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_fn_literal() {
+        let source = "let function_def := fn (param1, param2, param3, param4) {
+            let result := param1 + param2 + param3 + param4;
+            result
+        };";
+        let mut lexer = Lexer::new(source);
+        let mut parser = Parser::new(&mut lexer).unwrap();
+        let program = parser.parse_program();
+        match program {
+            Ok(p) => {
+                assert_eq!(p.statements.len(), 1);
+                match &p.statements[0] {
+                    Statement::Let {
+                        span: _,
+                        identifier,
+                        value,
+                    } => {
+                        assert_eq!(identifier, "function_def");
+                        match value {
+                            Expression::Lambda {
+                                span: _,
+                                params,
+                                body,
+                            } => {
+                                assert_eq!(params.len(), 4);
+                                assert_eq!(params[0], "param1");
+                                assert_eq!(params[1], "param2");
+                                assert_eq!(params[2], "param3");
+                                assert_eq!(params[3], "param4");
+                                match &**body {
+                                    Expression::Block {
+                                        span: _,
+                                        statements,
+                                        return_expr,
+                                    } => {
+                                        assert_eq!(statements.len(), 1);
+                                        match return_expr {
+                                            Some(expr) => {
+                                                assert!(matches!(
+                                                    **expr,
+                                                    Expression::Identifier {
+                                                        identifier: "result",
+                                                        ..
+                                                    }
+                                                ))
+                                            }
+                                            None => panic!(
+                                                "parser failed to identify the return expression of the function literal body as an indetfier"
+                                            ),
+                                        }
+                                    }
+                                    _ => panic!(
+                                        "parser failed to identify the body of the function literal as a block expression"
+                                    ),
+                                }
+                            }
+                            _ => panic!(
+                                "parser failed to identify the rhs expression of the let expression as a function literal"
+                            ),
+                        }
+                    }
+                    _ => panic!("parser failed to identify the let expression"),
+                }
+            }
+            Err(err) => {
+                let line_map = LineMap::new(source);
+                let reporter = Report::new(source, line_map, &*err);
+                panic!("failed to parse the program - {}", reporter);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_fn_call() {
+        let source = "let result := function_def(1, 2, 3, 4);";
+        let mut lexer = Lexer::new(source);
+        let mut parser = Parser::new(&mut lexer).unwrap();
+        let program = parser.parse_program();
+        match program {
+            Ok(p) => {
+                assert_eq!(p.statements.len(), 1);
+                match &p.statements[0] {
+                    Statement::Let {
+                        span: _,
+                        identifier,
+                        value,
+                    } => {
+                        assert_eq!(identifier, "result");
+                        match value {
+                            Expression::FnCall {
+                                span: _,
+                                func,
+                                args,
+                            } => {
+                                assert_eq!(args.len(), 4);
+                                assert!(matches!(
+                                    args[..],
+                                    [
+                                        Expression::Number { val: 1.0, .. },
+                                        Expression::Number { val: 2.0, .. },
+                                        Expression::Number { val: 3.0, .. },
+                                        Expression::Number { val: 4.0, .. },
+                                    ]
+                                ));
+                                assert!(matches!(
+                                    **func,
+                                    Expression::Identifier {
+                                        identifier: "function_def",
+                                        ..
+                                    }
+                                ));
+                            }
+                            _ => panic!(
+                                "parser failed to identify the rhs of the let expression as a function call"
+                            ),
+                        }
+                    }
+                    _ => panic!("parser failed to identify the let expression"),
                 }
             }
             Err(err) => {
