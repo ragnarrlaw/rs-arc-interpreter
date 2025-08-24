@@ -20,6 +20,35 @@ impl<'a> Report<'a> {
 
 impl<'a> Display for Report<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "error: {}", self.diagnostic.message())?;
+
+        if let Some(ctx) = self.diagnostic.context() {
+            for c in ctx.0.iter() {
+                let (line_start, col_num) = self
+                    .line_map
+                    .get_position(c.span.start_byte_pos)
+                    .unwrap_or((self.source.len(), self.source.len()));
+
+                let padding = " ".repeat(c.span.line_num.to_string().len());
+                let pointer_len = (c.span.end_byte_pos - c.span.start_byte_pos).max(1);
+                let pointer = format!("{}{}", " ".repeat(col_num), "^".repeat(pointer_len));
+                let line_end = self.source[line_start..]
+                    .find('\n')
+                    .map(|i| line_start + i)
+                    .unwrap_or(self.source.len());
+                let line_str = &self.source[line_start..line_end].trim_end_matches('\n');
+                writeln!(f, "{} |", padding)?;
+                writeln!(f, "{} | {}", c.span.line_num, line_str)?;
+                writeln!(
+                    f,
+                    "{} | {} {}",
+                    padding,
+                    pointer,
+                    c.msg.clone().unwrap_or_default()
+                )?;
+            }
+        }
+
         let span = self.diagnostic.span();
 
         let (line_start, col_num) = self
@@ -35,8 +64,6 @@ impl<'a> Display for Report<'a> {
             .map(|i| line_start + i)
             .unwrap_or(self.source.len());
         let line_str = &self.source[line_start..line_end].trim_end_matches('\n');
-
-        writeln!(f, "error: {}", self.diagnostic.message())?;
 
         writeln!(f, "{}--> repl:{}:{}", padding, span.line_num, span.col_num)?;
         writeln!(f, "{} |", padding)?;
