@@ -1047,7 +1047,7 @@ mod tests {
         lexer::Lexer,
         line_map::LineMap,
         parser::{
-            self, Parser,
+            Parser,
             ast::{Expression, Operator, Statement},
         },
     };
